@@ -23,12 +23,6 @@ beyond a paid flag, multiple branches or sites, price tiers and minimum order
 quantities, SMS sending, subscription billing, accounting integrations,
 realtime push.
 
-### Clean-room note
-
-The functional shape (ordering windows, linked orders, production run) comes
-from studying what the Itemcount product does. None of its code, schema
-names, UI, assets or branding are used. county has its own schema, API and UI.
-
 ## 2. Architecture
 
 ```mermaid

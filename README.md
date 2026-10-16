@@ -9,3 +9,10 @@ Ordering between wholesalers and their resellers. Design spec in
 Copyright 2026 Jason Calalang.
 
 Licensed under the GNU Affero General Public License v3.0. See `LICENSE`.
+
+## License
+
+Copyright 2026 Jason Calalang.
+
+The documents in this repository are licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). See `LICENSE`.

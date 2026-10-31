@@ -126,7 +126,7 @@ It shares the colour and type tokens and nothing else.
 | Note | `<textarea>` with a 500 character limit, label "Note for your supplier (optional)" |
 | Submit | Full-width primary button, "Place order", sticky to the bottom of the viewport when the script loads, static otherwise |
 | Running total | A line above the button, "Total ₱2,800.00", filled by the optional script; absent without it |
-| Recent orders | List rows: "#4 · Thu, 6 Nov · ₱2,160.00" with a badge; a Cancel text button on placed orders inside its own `<form>` |
+| Recent orders | List rows: "#4 · Wed, 5 Nov · ₱2,160.00" with a badge; a Cancel text button on placed orders inside its own `<form>` |
 | Error block | Above the form, `danger` text, one line per error, each a link to the row |
 | Confirmation | Card with "Order #6 placed" in `title`, delivery date, line table, total, note, and a "Back to price list" link |
 | Inactive | Centred `heading` and one line of `body`; nothing else on the page |

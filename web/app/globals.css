@@ -1,0 +1,11 @@
+/* System fonts only: no web fonts anywhere (UI design, section 3). */
+html {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+body {
+  margin: 0;
+  padding: 16px;
+}

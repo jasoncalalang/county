@@ -1,4 +1,4 @@
-package io.github.jasoncalalang.county;
+package ph.com.ridgewell.county;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.hasItem;

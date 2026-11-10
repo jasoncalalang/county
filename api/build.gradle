@@ -21,7 +21,7 @@ dependencies {
     testImplementation 'io.rest-assured:rest-assured'
 }
 
-group = 'io.github.jasoncalalang'
+group = 'ph.com.ridgewell'
 version = '1.0.0-SNAPSHOT'
 
 java {

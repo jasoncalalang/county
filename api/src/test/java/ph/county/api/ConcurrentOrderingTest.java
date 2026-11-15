@@ -20,12 +20,7 @@ class ConcurrentOrderingTest {
     String token = UUID.randomUUID().toString().replace("-", "").substring(0, 22);
     long tenant, product;
     try (Connection c = source.getConnection()) {
-      tenant =
-          insert(
-              c,
-              "INSERT INTO business(owner_subject,name,cutoff,delivery_days) VALUES"
-                  + " (?,'Concurrent','16:00',ARRAY[1,2,3,4,5,6]) RETURNING id",
-              UUID.randomUUID().toString());
+      tenant = TestOwners.createBusiness(c, UUID.randomUUID().toString());
       product =
           insert(
               c,

@@ -42,7 +42,9 @@ For domain-only tests: `./gradlew test --tests 'ph.county.domain.*'`.
 ## API
 
 Root `/api`; health `/q/health`, OpenAPI `/q/openapi`. Generated OpenAPI is written
-under `build/openapi` during build (not yet committed as the frontend contract).
+under `build/openapi` during build; the versioned contract is `contract/openapi.yaml`.
+`./gradlew verifyOpenApi` checks drift and runs as part of `check`/`build`. After an
+intentional API change, run `./gradlew updateOpenApi`, inspect and commit its diff.
 
 Owner: `/me`, `POST /tenants`, `GET/PUT /settings`, `GET/POST /products`,
 `PUT /products/{id}`, `GET/POST /resellers`, `PUT /resellers/{id}`,
@@ -61,27 +63,28 @@ Do not log bearer tokens/order links. API responses are `no-store` with no refer
 
 - Explicit parameterized JDBC transactions through Agroal protect tenant numbering,
   order idempotency and state changes. This slice uses SQL rather than Panache entity
-  methods for these lock-sensitive operations; do not mix an independent ORM transaction
+  methods for these lock-sensitive operations; proposed [ADR 0013](https://github.com/jasoncalalang/county-architecture/pull/2)
+  records this exception for review. Do not mix an independent ORM transaction
   with this connection. Panache remains available for future conventional persistence.
 - Reseller token is stored as a bearer secret so an owner can copy its current link.
   Protect database backups and keep URL credentials out of logs and analytics.
+- Verified Google subjects resolve through `external_identity(provider, subject)`
+  to `app_user`; business ownership uses the user ID. First `/me` provisions the
+  user idempotently. Profile fields come only from verified token claims; email is
+  never an account-linking key. V2 backfills V1 owners without changing business IDs.
+- Public HTTP responses use explicit typed DTOs rather than exposing database maps.
 - No web UI, real Google browser acceptance, production deployment, rate limiting,
-  automated contract drift gate, or operational backup validation is included.
+  or operational backup validation is included.
 - Local defaults are development credentials only. Set explicit real credentials and
   Google audience before any production use; deployment is a separate authorized task.
 
 ### Explicit next backend work
 
 This is a draft foundation, not a complete v1 backend certification:
-- Introduce the accepted user/identity mapping `(provider, subject)`; this first
-  Google-only slice currently binds business ownership directly to the verified
-  Google subject and does not create a separate user before business setup.
-- Replace generic response maps with typed DTO/OpenAPI response schemas and commit
-  the stable contract before generating a frontend client.
 - Add settings preview metadata, order-list product/reseller display summaries and
   consistent API field-error shapes for all JSON decoding failures.
-- Expand concurrency coverage to product changes/placement and simultaneous
-  different-key orders; existing test covers four simultaneous identical submissions.
+- Extend concurrency coverage when adding new workflows. Existing tests cover
+  same-key replays, distinct-key numbering, and product edit/deactivation interleavings.
 
 Do not treat this branch as production-ready or deploy it before these integration
 and contract gaps are addressed and reviewed.

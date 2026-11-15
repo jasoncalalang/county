@@ -24,12 +24,7 @@ class ReviewRegressionTest {
 
   private Fixture fixture(String subject) throws SQLException {
     try (Connection c = source.getConnection()) {
-      long tenant =
-          insert(
-              c,
-              "INSERT INTO business(owner_subject,name,cutoff,delivery_days) VALUES (?, 'Review"
-                  + " business', '16:00', ARRAY[1,2,3,4,5,6,7]) RETURNING id",
-              subject);
+      long tenant = TestOwners.createBusiness(c, subject);
       long product =
           insert(
               c,

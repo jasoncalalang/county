@@ -22,19 +22,67 @@ public class Owners {
   private static final SecureRandom RANDOM = new SecureRandom();
 
   public static Map<String, Object> tenant(Connection c, String subject) throws SQLException {
-    return one(c, "SELECT * FROM business WHERE owner_subject=?", subject);
+    return one(
+        c,
+        "SELECT b.* FROM business b JOIN external_identity i ON i.user_id=b.owner_user_id WHERE"
+            + " i.provider='google' AND i.subject=?",
+        subject);
+  }
+
+  // Authentication has already verified the Google token. Profile fields are
+  // descriptive only: email is never an account-linking or authorization key.
+  private static Map<String, Object> user(Connection c, String subject, String name, String email)
+      throws SQLException {
+    if (subject == null || subject.isBlank()) throw new Problem(401, "Sign in required");
+    // Serialize first-sign-in provisioning for this identity. Hash collisions
+    // merely serialize unrelated identities; the composite PK is authoritative.
+    one(c, "SELECT pg_advisory_xact_lock(hashtextextended(?,0))", "google:" + subject);
+    var existing =
+        rows(
+            c,
+            "SELECT u.id,u.display_name,u.email FROM app_user u JOIN external_identity i ON"
+                + " i.user_id=u.id WHERE i.provider='google' AND i.subject=?",
+            subject);
+    if (existing.isEmpty()) {
+      var created =
+          one(
+              c,
+              "INSERT INTO app_user(display_name,email) VALUES (?,?) RETURNING"
+                  + " id,display_name,email",
+              name,
+              email);
+      execute(
+          c,
+          "INSERT INTO external_identity(provider,subject,user_id) VALUES ('google',?,?)",
+          subject,
+          id(created));
+      return created;
+    }
+    return one(
+        c,
+        "UPDATE app_user SET display_name=COALESCE(?,display_name),email=COALESCE(?,email) WHERE"
+            + " id=? RETURNING id,display_name,email",
+        name,
+        email,
+        id(existing.getFirst()));
   }
 
   public Map<String, Object> me(String subject) {
+    return me(subject, null, null);
+  }
+
+  public Map<String, Object> me(String subject, String displayName, String email) {
     return db.transaction(
         c -> {
+          var user = user(c, subject, displayName, email);
           var tenants =
               rows(
                   c,
-                  "SELECT id,name,cutoff,delivery_days FROM business WHERE owner_subject=?",
-                  subject);
+                  "SELECT id,name,cutoff,delivery_days FROM business WHERE owner_user_id=?",
+                  id(user));
           Map<String, Object> result = new LinkedHashMap<>();
           result.put("subject", subject);
+          result.put("user", user);
           result.put("tenant", tenants.isEmpty() ? null : tenants.getFirst());
           return result;
         });
@@ -42,15 +90,17 @@ public class Owners {
 
   public Map<String, Object> create(String subject, Inputs.Business input) {
     return db.transaction(
-        c ->
-            one(
-                c,
-                "INSERT INTO business(owner_subject,name,cutoff,delivery_days) VALUES (?,?,?,?)"
-                    + " RETURNING id,name,cutoff,delivery_days",
-                subject,
-                input.name().trim(),
-                LocalTime.parse(input.cutoff()),
-                c.createArrayOf("integer", input.deliveryDays().toArray())));
+        c -> {
+          long owner = id(user(c, subject, null, null));
+          return one(
+              c,
+              "INSERT INTO business(owner_user_id,name,cutoff,delivery_days) VALUES (?,?,?,?)"
+                  + " RETURNING id,name,cutoff,delivery_days",
+              owner,
+              input.name().trim(),
+              LocalTime.parse(input.cutoff()),
+              c.createArrayOf("integer", input.deliveryDays().toArray()));
+        });
   }
 
   public Object settings(String subject, Inputs.Business input) {

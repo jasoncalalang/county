@@ -24,12 +24,7 @@ class IsolationApiTest {
 
   private Fixture fixture(String subject) throws SQLException {
     try (Connection c = dataSource.getConnection()) {
-      long tenant =
-          insert(
-              c,
-              "INSERT INTO business(owner_subject,name,cutoff,delivery_days) VALUES (?, 'Isolation"
-                  + " business', '16:00', ARRAY[1,2,3,4,5,6]) RETURNING id",
-              subject);
+      long tenant = TestOwners.createBusiness(c, subject);
       long product =
           insert(
               c,

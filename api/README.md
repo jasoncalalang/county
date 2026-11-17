@@ -37,7 +37,7 @@ never clean a database. Remove disposable schemas afterwards using your local DB
 admin tools. The integration suite must fail if PostgreSQL is unavailable; it does
 not silently skip. Tests do not use production credentials or an external Google login.
 
-For domain-only tests: `./gradlew test --tests 'ph.county.domain.*'`.
+For domain-only tests: `./gradlew test --tests 'ph.com.ridgewell.county.domain.*'`.
 
 ## API
 

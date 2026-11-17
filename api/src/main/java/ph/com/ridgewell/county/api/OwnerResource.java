@@ -18,7 +18,6 @@ import ph.com.ridgewell.county.persistence.*;
 public class OwnerResource {
   @Inject io.quarkus.security.identity.SecurityIdentity identity;
   @Inject Owners owners;
-  @Inject Views views;
   @jakarta.ws.rs.core.Context jakarta.ws.rs.core.UriInfo uri;
   @Inject Orders orders;
 
@@ -33,8 +32,7 @@ public class OwnerResource {
   public Views.Me me() {
     String subject = subject();
     var jwt = (JsonWebToken) identity.getPrincipal();
-    return views.as(
-        owners.me(subject, jwt.getClaim("name"), jwt.getClaim("email")), Views.Me.class);
+    return owners.me(subject, jwt.getClaim("name"), jwt.getClaim("email"));
   }
 
   @POST
@@ -44,27 +42,27 @@ public class OwnerResource {
       content = @Content(schema = @Schema(implementation = Views.Business.class)))
   public Response create(@jakarta.validation.constraints.NotNull @Valid Inputs.Business input) {
     return Response.status(201)
-        .entity(views.as(owners.create(subject(), input), Views.Business.class))
+        .entity(owners.create(subject(), input))
         .build();
   }
 
   @GET
   @Path("settings")
   public Views.Business settings() {
-    return views.as(owners.settings(subject(), null), Views.Business.class);
+    return owners.settings(subject(), null);
   }
 
   @PUT
   @Path("settings")
   public Views.Business settings(
       @jakarta.validation.constraints.NotNull @Valid Inputs.Business input) {
-    return views.as(owners.settings(subject(), input), Views.Business.class);
+    return owners.settings(subject(), input);
   }
 
   @GET
   @Path("products")
   public List<Views.Product> products() {
-    return views.list(owners.products(subject()), Views.Product.class);
+    return owners.products(subject());
   }
 
   @POST
@@ -74,7 +72,7 @@ public class OwnerResource {
       content = @Content(schema = @Schema(implementation = Views.Product.class)))
   public Response product(@jakarta.validation.constraints.NotNull @Valid Inputs.Product input) {
     return Response.status(201)
-        .entity(views.as(owners.product(subject(), null, input), Views.Product.class))
+        .entity(owners.product(subject(), null, input))
         .build();
   }
 
@@ -83,13 +81,13 @@ public class OwnerResource {
   public Views.Product product(
       @PathParam("id") long id,
       @jakarta.validation.constraints.NotNull @Valid Inputs.Product input) {
-    return views.as(owners.product(subject(), id, input), Views.Product.class);
+    return owners.product(subject(), id, input);
   }
 
   @GET
   @Path("resellers")
   public List<Views.Reseller> resellers() {
-    return views.list(owners.resellers(subject()), Views.Reseller.class);
+    return owners.resellers(subject());
   }
 
   @POST
@@ -99,7 +97,7 @@ public class OwnerResource {
       content = @Content(schema = @Schema(implementation = Views.Reseller.class)))
   public Response reseller(@jakarta.validation.constraints.NotNull @Valid Inputs.Reseller input) {
     return Response.status(201)
-        .entity(views.as(owners.reseller(subject(), null, input), Views.Reseller.class))
+        .entity(owners.reseller(subject(), null, input))
         .build();
   }
 
@@ -108,14 +106,14 @@ public class OwnerResource {
   public Views.Reseller reseller(
       @PathParam("id") long id,
       @jakarta.validation.constraints.NotNull @Valid Inputs.Reseller input) {
-    return views.as(owners.reseller(subject(), id, input), Views.Reseller.class);
+    return owners.reseller(subject(), id, input);
   }
 
   @POST
   @Path("resellers/{id}/{action:block|unblock|reissue-link}")
   public Views.Reseller resellerAction(
       @PathParam("id") long id, @PathParam("action") String action) {
-    return views.as(owners.resellerAction(subject(), id, action), Views.Reseller.class);
+    return owners.resellerAction(subject(), id, action);
   }
 
   @GET
@@ -124,25 +122,25 @@ public class OwnerResource {
       @QueryParam("date") String date, @QueryParam("status") String status) {
     if (date == null && uri.getQueryParameters().containsKey("date"))
       throw new Problem(422, "Invalid delivery date");
-    return views.list(orders.list(subject(), date, status), Views.OrderSummary.class);
+    return orders.list(subject(), date, status);
   }
 
   @GET
   @Path("orders/{id}")
   public Views.Order order(@PathParam("id") long id) {
-    return views.as(orders.get(subject(), id), Views.Order.class);
+    return orders.get(subject(), id);
   }
 
   @POST
   @Path("orders/{id}/confirm")
   public Views.Order confirm(@PathParam("id") long id) {
-    return views.as(orders.transition(subject(), null, id, "confirmed", false), Views.Order.class);
+    return orders.transition(subject(), null, id, "confirmed", false);
   }
 
   @POST
   @Path("orders/{id}/cancel")
   public Views.Order cancel(@PathParam("id") long id) {
-    return views.as(orders.transition(subject(), null, id, "cancelled", false), Views.Order.class);
+    return orders.transition(subject(), null, id, "cancelled", false);
   }
 
   @POST
@@ -150,19 +148,18 @@ public class OwnerResource {
   public Views.Order deliver(
       @PathParam("id") long id,
       @jakarta.validation.constraints.NotNull @Valid Inputs.Deliver input) {
-    return views.as(
-        orders.transition(subject(), null, id, "delivered", input.paid()), Views.Order.class);
+    return orders.transition(subject(), null, id, "delivered", input.paid());
   }
 
   @POST
   @Path("orders/{id}/mark-paid")
   public Views.Order paid(@PathParam("id") long id) {
-    return views.as(orders.transition(subject(), null, id, "paid", true), Views.Order.class);
+    return orders.transition(subject(), null, id, "paid", true);
   }
 
   @GET
   @Path("production-run")
   public Views.ProductionRun production(@QueryParam("date") String date) {
-    return views.as(orders.production(subject(), date), Views.ProductionRun.class);
+    return orders.production(subject(), date);
   }
 }

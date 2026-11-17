@@ -1,7 +1,7 @@
 package ph.com.ridgewell.county.api;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static ph.com.ridgewell.county.persistence.Database.*;
+import static ph.com.ridgewell.county.api.TestSql.*;
 
 import io.agroal.api.AgroalDataSource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -17,8 +17,8 @@ class IdentityPersistenceTest {
   @Inject AgroalDataSource source;
   @Inject Owners owners;
 
-  private long userId(Map<String, Object> me) {
-    return ((Number) ((Map<?, ?>) me.get("user")).get("id")).longValue();
+  private long userId(Views.Me me) {
+    return me.user().id();
   }
 
   @Test
@@ -94,10 +94,15 @@ class IdentityPersistenceTest {
             s.execute(new String(in.readAllBytes(), StandardCharsets.UTF_8));
           }
         }
-        var tenant = Owners.tenant(c, "legacy-owner");
+        var tenant =
+            one(
+                c,
+                "SELECT b.* FROM business b JOIN external_identity i ON i.user_id=b.owner_user_id"
+                    + " WHERE i.provider='google' AND i.subject=?",
+                "legacy-owner");
         assertEquals(41L, id(tenant));
         assertEquals("Legacy", tenant.get("name"));
-        assertEquals(41L, tenant.get("ownerUserId"));
+        assertEquals(41L, tenant.get("owner_user_id"));
         assertTrue(id(one(c, "INSERT INTO app_user DEFAULT VALUES RETURNING id")) > 41);
       } finally {
         c.rollback();

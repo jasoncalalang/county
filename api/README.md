@@ -61,11 +61,13 @@ Do not log bearer tokens/order links. API responses are `no-store` with no refer
 
 ## Implementation notes / limits
 
-- Explicit parameterized JDBC transactions through Agroal protect tenant numbering,
-  order idempotency and state changes. This slice uses SQL rather than Panache entity
-  methods for these lock-sensitive operations; proposed [ADR 0013](https://github.com/jasoncalalang/county-architecture/pull/2)
-  records this exception for review. Do not mix an independent ORM transaction
-  with this connection. Panache remains available for future conventional persistence.
+- Persistence is Hibernate ORM with Panache entities (`persistence/`), per ADR 0013
+  in county-architecture. Each service method is one `@Transactional` unit. Tenant
+  numbering, order idempotency and state changes use JPA pessimistic locks, always in
+  this order: reseller, business, products by ascending id, order. Keep that order in
+  new workflows. Flyway owns the schema; Hibernate never generates or alters it.
+- First sign-in takes a PostgreSQL advisory lock through a native query on the same
+  entity manager, so concurrent first calls create one user.
 - Reseller token is stored as a bearer secret so an owner can copy its current link.
   Protect database backups and keep URL credentials out of logs and analytics.
 - Verified Google subjects resolve through `external_identity(provider, subject)`

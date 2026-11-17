@@ -1,25 +1,12 @@
 package ph.com.ridgewell.county.api;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 import java.math.BigDecimal;
 import java.util.List;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
-/** Explicit wire contracts: database columns are never serialized by resource methods. */
-@ApplicationScoped
-public class Views {
-  @Inject ObjectMapper mapper;
-
-  public <T> T as(Object value, Class<T> type) {
-    return mapper.convertValue(value, type);
-  }
-
-  public <T> List<T> list(Object value, Class<T> type) {
-    return mapper.convertValue(
-        value, mapper.getTypeFactory().constructCollectionType(List.class, type));
-  }
+/** Explicit wire contracts: entities are never serialized by resource methods. */
+public final class Views {
+  private Views() {}
 
   @Schema(name = "UserView")
   public record User(

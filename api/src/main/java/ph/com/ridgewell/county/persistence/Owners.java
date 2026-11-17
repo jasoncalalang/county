@@ -1,12 +1,13 @@
 package ph.com.ridgewell.county.persistence;
 
-import static ph.com.ridgewell.county.persistence.Database.*;
+import static jakarta.persistence.LockModeType.PESSIMISTIC_WRITE;
 
+import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
+import java.math.RoundingMode;
 import java.security.SecureRandom;
-import java.sql.*;
-import java.time.*;
+import java.time.LocalTime;
 import java.util.*;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import ph.com.ridgewell.county.api.*;
@@ -14,242 +15,193 @@ import ph.com.ridgewell.county.domain.PhilippineMobile;
 
 @ApplicationScoped
 public class Owners {
-  @Inject Database db;
-
   @ConfigProperty(name = "county.public-url")
   String publicUrl;
 
   private static final SecureRandom RANDOM = new SecureRandom();
 
-  public static Map<String, Object> tenant(Connection c, String subject) throws SQLException {
-    return one(
-        c,
-        "SELECT b.* FROM business b JOIN external_identity i ON i.user_id=b.owner_user_id WHERE"
-            + " i.provider='google' AND i.subject=?",
-        subject);
+  /** The business owned by the signed-in Google subject, or 404. */
+  static Business tenant(String subject) {
+    var identity = ExternalIdentity.google(subject);
+    var business = identity == null ? null : Business.ownedBy(identity.userId);
+    if (business == null) throw new Problem(404, "Not found");
+    return business;
   }
 
   // Authentication has already verified the Google token. Profile fields are
   // descriptive only: email is never an account-linking or authorization key.
-  private static Map<String, Object> user(Connection c, String subject, String name, String email)
-      throws SQLException {
+  private static AppUser user(String subject, String name, String email) {
     if (subject == null || subject.isBlank()) throw new Problem(401, "Sign in required");
-    // Serialize first-sign-in provisioning for this identity. Hash collisions
-    // merely serialize unrelated identities; the composite PK is authoritative.
-    one(c, "SELECT pg_advisory_xact_lock(hashtextextended(?,0))", "google:" + subject);
-    var existing =
-        rows(
-            c,
-            "SELECT u.id,u.display_name,u.email FROM app_user u JOIN external_identity i ON"
-                + " i.user_id=u.id WHERE i.provider='google' AND i.subject=?",
-            subject);
-    if (existing.isEmpty()) {
-      var created =
-          one(
-              c,
-              "INSERT INTO app_user(display_name,email) VALUES (?,?) RETURNING"
-                  + " id,display_name,email",
-              name,
-              email);
-      execute(
-          c,
-          "INSERT INTO external_identity(provider,subject,user_id) VALUES ('google',?,?)",
-          subject,
-          id(created));
+    // Serialize first-sign-in provisioning for this identity. Hash collisions merely
+    // serialize unrelated identities; the composite primary key is authoritative.
+    AppUser.getEntityManager()
+        .createNativeQuery("SELECT count(*) FROM pg_advisory_xact_lock(hashtextextended(?1,0))")
+        .setParameter(1, ExternalIdentity.GOOGLE + ":" + subject)
+        .getSingleResult();
+    var identity = ExternalIdentity.google(subject);
+    if (identity == null) {
+      var created = new AppUser();
+      created.displayName = name;
+      created.email = email;
+      created.persist();
+      identity = new ExternalIdentity();
+      identity.provider = ExternalIdentity.GOOGLE;
+      identity.subject = subject;
+      identity.userId = created.id;
+      identity.persist();
       return created;
     }
-    return one(
-        c,
-        "UPDATE app_user SET display_name=COALESCE(?,display_name),email=COALESCE(?,email) WHERE"
-            + " id=? RETURNING id,display_name,email",
-        name,
-        email,
-        id(existing.getFirst()));
+    AppUser existing = AppUser.findById(identity.userId);
+    if (name != null) existing.displayName = name;
+    if (email != null) existing.email = email;
+    return existing;
   }
 
-  public Map<String, Object> me(String subject) {
+  @Transactional
+  public Views.Me me(String subject) {
     return me(subject, null, null);
   }
 
-  public Map<String, Object> me(String subject, String displayName, String email) {
-    return db.transaction(
-        c -> {
-          var user = user(c, subject, displayName, email);
-          var tenants =
-              rows(
-                  c,
-                  "SELECT id,name,cutoff,delivery_days FROM business WHERE owner_user_id=?",
-                  id(user));
-          Map<String, Object> result = new LinkedHashMap<>();
-          result.put("subject", subject);
-          result.put("user", user);
-          result.put("tenant", tenants.isEmpty() ? null : tenants.getFirst());
-          return result;
-        });
+  @Transactional
+  public Views.Me me(String subject, String displayName, String email) {
+    var user = user(subject, displayName, email);
+    var business = Business.ownedBy(user.id);
+    return new Views.Me(
+        subject,
+        new Views.User(user.id, user.displayName, user.email),
+        business == null ? null : view(business));
   }
 
-  public Map<String, Object> create(String subject, Inputs.Business input) {
-    return db.transaction(
-        c -> {
-          long owner = id(user(c, subject, null, null));
-          return one(
-              c,
-              "INSERT INTO business(owner_user_id,name,cutoff,delivery_days) VALUES (?,?,?,?)"
-                  + " RETURNING id,name,cutoff,delivery_days",
-              owner,
-              input.name().trim(),
-              LocalTime.parse(input.cutoff()),
-              c.createArrayOf("integer", input.deliveryDays().toArray()));
-        });
+  @Transactional
+  public Views.Business create(String subject, Inputs.Business input) {
+    var business = new Business();
+    business.ownerUserId = user(subject, null, null).id;
+    apply(business, input);
+    business.persist();
+    return view(business);
   }
 
-  public Object settings(String subject, Inputs.Business input) {
-    return db.transaction(
-        c -> {
-          long id = id(tenant(c, subject));
-          if (input != null)
-            execute(
-                c,
-                "UPDATE business SET name=?,cutoff=?,delivery_days=? WHERE id=?",
-                input.name().trim(),
-                LocalTime.parse(input.cutoff()),
-                c.createArrayOf("integer", input.deliveryDays().toArray()),
-                id);
-          return one(c, "SELECT id,name,cutoff,delivery_days FROM business WHERE id=?", id);
-        });
+  @Transactional
+  public Views.Business settings(String subject, Inputs.Business input) {
+    var business = tenant(subject);
+    if (input != null) {
+      apply(business, input);
+      Business.flush();
+    }
+    return view(business);
   }
 
-  public Object products(String subject) {
-    return db.transaction(
-        c ->
-            rows(
-                c,
-                "SELECT id,name,unit,price,active FROM product WHERE tenant_id=? ORDER BY active"
-                    + " DESC,id",
-                id(tenant(c, subject))));
+  private static void apply(Business business, Inputs.Business input) {
+    business.name = input.name().trim();
+    business.cutoff = LocalTime.parse(input.cutoff());
+    business.deliveryDays = input.deliveryDays().toArray(Integer[]::new);
   }
 
-  public Object product(String subject, Long product, Inputs.Product input) {
-    return db.transaction(
-        c -> {
-          long tenant = id(tenant(c, subject));
-          if (product == null)
-            return one(
-                c,
-                "INSERT INTO product(tenant_id,name,unit,price,active) VALUES (?,?,?,?,?) RETURNING"
-                    + " id,name,unit,price,active",
-                tenant,
-                input.name().trim(),
-                input.unit(),
-                input.price(),
-                input.active() == null || input.active());
-          var old =
-              one(
-                  c,
-                  "SELECT * FROM product WHERE tenant_id=? AND id=? FOR UPDATE",
-                  tenant,
-                  product);
-          if (!old.get("unit").equals(input.unit())
-              && !rows(
-                      c,
-                      "SELECT id FROM order_line WHERE tenant_id=? AND product_id=? LIMIT 1",
-                      tenant,
-                      product)
-                  .isEmpty()) throw new Problem(409, "Unit cannot change after ordering");
-          return one(
-              c,
-              "UPDATE product SET name=?,unit=?,price=?,active=? WHERE tenant_id=? AND id=?"
-                  + " RETURNING id,name,unit,price,active",
-              input.name().trim(),
-              input.unit(),
-              input.price(),
-              input.active() == null ? old.get("active") : input.active(),
-              tenant,
-              product);
-        });
+  @Transactional
+  public List<Views.Product> products(String subject) {
+    return Product.<Product>list(
+            "tenantId", Sort.descending("active").and("id"), tenant(subject).id)
+        .stream()
+        .map(Owners::view)
+        .toList();
   }
 
-  public Object resellers(String subject) {
-    return db.transaction(
-        c ->
-            rows(
-                    c,
-                    "SELECT r.id,r.name,r.mobile,r.status,r.token,(SELECT max(o.placed_at) FROM"
-                        + " purchase_order o WHERE o.tenant_id=r.tenant_id AND o.reseller_id=r.id)"
-                        + " last_order_at FROM reseller r WHERE r.tenant_id=? ORDER BY r.id",
-                    id(tenant(c, subject)))
-                .stream()
-                .map(this::link)
-                .toList());
+  @Transactional
+  public Views.Product product(String subject, Long id, Inputs.Product input) {
+    long tenant = tenant(subject).id;
+    Product product;
+    if (id == null) {
+      product = new Product();
+      product.tenantId = tenant;
+      product.active = input.active() == null || input.active();
+    } else {
+      // Exclusive lock: a placement reading this product waits for the edit to commit.
+      product =
+          Product.inTenant(tenant, id, PESSIMISTIC_WRITE)
+              .orElseThrow(() -> new Problem(404, "Not found"));
+      if (!product.unit.equals(input.unit())
+          && OrderLine.count("tenantId = ?1 and productId = ?2", tenant, id) > 0)
+        throw new Problem(409, "Unit cannot change after ordering");
+      if (input.active() != null) product.active = input.active();
+    }
+    product.name = input.name().trim();
+    product.unit = input.unit();
+    product.price = input.price().setScale(2, RoundingMode.UNNECESSARY);
+    product.persist();
+    Product.flush();
+    return view(product);
   }
 
-  public Object reseller(String subject, Long reseller, Inputs.Reseller input) {
-    return db.transaction(
-        c -> {
-          long tenant = id(tenant(c, subject));
-          String mobile = PhilippineMobile.normalize(input.mobile());
-          if (reseller == null)
-            return link(
-                one(
-                    c,
-                    "INSERT INTO reseller(tenant_id,name,mobile,token) VALUES (?,?,?,?) RETURNING"
-                        + " id,name,mobile,status,token",
-                    tenant,
-                    input.name().trim(),
-                    mobile,
-                    token()));
-          return link(
-              one(
-                  c,
-                  "UPDATE reseller SET name=?,mobile=? WHERE tenant_id=? AND id=? RETURNING"
-                      + " id,name,mobile,status,token",
-                  input.name().trim(),
-                  mobile,
-                  tenant,
-                  reseller));
-        });
+  @Transactional
+  public List<Views.Reseller> resellers(String subject) {
+    long tenant = tenant(subject).id;
+    Map<Long, Object> lastOrders = new HashMap<>();
+    for (Object[] row :
+        PurchaseOrder.getEntityManager()
+            .createQuery(
+                "select o.resellerId, max(o.placedAt) from PurchaseOrder o"
+                    + " where o.tenantId = ?1 group by o.resellerId",
+                Object[].class)
+            .setParameter(1, tenant)
+            .getResultList()) lastOrders.put((Long) row[0], row[1]);
+    return Reseller.<Reseller>list("tenantId", Sort.by("id"), tenant).stream()
+        .map(r -> view(r, lastOrders.get(r.id)))
+        .toList();
   }
 
-  public Object resellerAction(String subject, long reseller, String action) {
-    return db.transaction(
-        c -> {
-          long tenant = id(tenant(c, subject));
-          one(c, "SELECT id FROM reseller WHERE tenant_id=? AND id=? FOR UPDATE", tenant, reseller);
-          switch (action) {
-            case "block" ->
-                execute(
-                    c,
-                    "UPDATE reseller SET status='blocked' WHERE tenant_id=? AND id=?",
-                    tenant,
-                    reseller);
-            case "unblock" ->
-                execute(
-                    c,
-                    "UPDATE reseller SET status=CASE WHEN has_ordered THEN 'active' ELSE 'invited'"
-                        + " END WHERE tenant_id=? AND id=?",
-                    tenant,
-                    reseller);
-            case "reissue-link" ->
-                execute(
-                    c,
-                    "UPDATE reseller SET token=? WHERE tenant_id=? AND id=?",
-                    token(),
-                    tenant,
-                    reseller);
-            default -> throw new Problem(404, "Not found");
-          }
-          return link(
-              one(
-                  c,
-                  "SELECT id,name,mobile,status,token FROM reseller WHERE tenant_id=? AND id=?",
-                  tenant,
-                  reseller));
-        });
+  @Transactional
+  public Views.Reseller reseller(String subject, Long id, Inputs.Reseller input) {
+    long tenant = tenant(subject).id;
+    String mobile = PhilippineMobile.normalize(input.mobile());
+    Reseller reseller;
+    if (id == null) {
+      reseller = new Reseller();
+      reseller.tenantId = tenant;
+      reseller.token = token();
+    } else
+      reseller =
+          Reseller.inTenant(tenant, id, PESSIMISTIC_WRITE)
+              .orElseThrow(() -> new Problem(404, "Not found"));
+    reseller.name = input.name().trim();
+    reseller.mobile = mobile;
+    reseller.persist();
+    Reseller.flush();
+    return view(reseller, null);
   }
 
-  private Map<String, Object> link(Map<String, Object> row) {
-    row.put("orderLink", publicUrl.replaceAll("/$", "") + "/order/" + row.get("token"));
-    return row;
+  @Transactional
+  public Views.Reseller resellerAction(String subject, long id, String action) {
+    var reseller =
+        Reseller.inTenant(tenant(subject).id, id, PESSIMISTIC_WRITE)
+            .orElseThrow(() -> new Problem(404, "Not found"));
+    switch (action) {
+      case "block" -> reseller.status = "blocked";
+      case "unblock" -> reseller.status = reseller.hasOrdered ? "active" : "invited";
+      case "reissue-link" -> reseller.token = token();
+      default -> throw new Problem(404, "Not found");
+    }
+    Reseller.flush();
+    return view(reseller, null);
+  }
+
+  static Views.Business view(Business b) {
+    return new Views.Business(
+        b.id, b.name, Times.clock(b.cutoff), Arrays.asList(b.deliveryDays));
+  }
+
+  private static Views.Product view(Product p) {
+    return new Views.Product(p.id, p.name, p.unit, p.price, p.active);
+  }
+
+  private Views.Reseller view(Reseller r, Object lastOrderAt) {
+    return new Views.Reseller(
+        r.id,
+        r.name,
+        r.mobile,
+        r.status,
+        r.token,
+        publicUrl.replaceAll("/$", "") + "/order/" + r.token,
+        lastOrderAt == null ? null : Times.instant((java.time.Instant) lastOrderAt));
   }
 
   private static String token() {

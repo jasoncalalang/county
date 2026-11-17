@@ -13,6 +13,8 @@ public class Problems implements ExceptionMapper<Exception> {
   @Override
   public Response toResponse(Exception exception) {
     if (exception instanceof Problem problem) return problem.getResponse();
+    if (uniqueViolation(exception))
+      return new Problem(409, "A record with those details already exists").getResponse();
     int status = 500;
     String detail = "The request could not be completed";
     Map<String, String> fields = Map.of();
@@ -47,5 +49,11 @@ public class Problems implements ExceptionMapper<Exception> {
                 "errors",
                 fields))
         .build();
+  }
+
+  private static boolean uniqueViolation(Throwable error) {
+    for (Throwable t = error; t != null; t = t.getCause())
+      if (t instanceof java.sql.SQLException sql && "23505".equals(sql.getSQLState())) return true;
+    return false;
   }
 }

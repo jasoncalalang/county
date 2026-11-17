@@ -154,8 +154,7 @@ class ProductOrderingConcurrencyTest {
         var s =
             c.prepareStatement(
                 "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND"
-                    + " wait_event_type='Lock' AND query LIKE 'SELECT id,name,unit,price,active"
-                    + " FROM product%'")) {
+                    + " wait_event_type='Lock' AND query ILIKE '%from product %for share%'")) {
       while (System.nanoTime() < deadline) {
         try (var r = s.executeQuery()) {
           r.next();

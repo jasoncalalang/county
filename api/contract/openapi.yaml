@@ -1,0 +1,943 @@
+---
+openapi: 3.1.0
+components:
+  schemas:
+    Business:
+      type: object
+      required:
+      - name
+      - cutoff
+      - deliveryDays
+      properties:
+        name:
+          type: string
+          pattern: \S
+          maxLength: 80
+        cutoff:
+          type: string
+        deliveryDays:
+          type: array
+          uniqueItems: true
+          items:
+            type: integer
+            format: int32
+            maximum: 7
+            minimum: 1
+          minItems: 1
+    BusinessView:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        cutoff:
+          type: string
+          format: time
+        deliveryDays:
+          type: array
+          items:
+            type: integer
+            format: int32
+    CatalogProductView:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        unit:
+          type: string
+          enum:
+          - pack
+          - kg
+          - pc
+        price:
+          type: number
+    CatalogView:
+      type: object
+      properties:
+        businessName:
+          type: string
+        resellerName:
+          type: string
+        deliveryDate:
+          type: string
+          format: date
+        cutoff:
+          type: string
+          format: time
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/CatalogProductView"
+        recentOrders:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecentOrderView"
+    Deliver:
+      type: object
+      required:
+      - paid
+      properties:
+        paid:
+          type: boolean
+    Line:
+      type: object
+      required:
+      - productId
+      - quantity
+      properties:
+        productId:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+        quantity:
+          type: integer
+          format: int32
+          maximum: 9999
+          minimum: 1
+    MeView:
+      type: object
+      properties:
+        subject:
+          type: string
+        user:
+          $ref: "#/components/schemas/UserView"
+        tenant:
+          anyOf:
+          - $ref: "#/components/schemas/BusinessView"
+          - type: "null"
+    OrderLineView:
+      type: object
+      properties:
+        productId:
+          type: integer
+          format: int64
+        productName:
+          type: string
+        unit:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        price:
+          type: number
+        total:
+          type: number
+    OrderSummaryView:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        number:
+          type: integer
+          format: int64
+        resellerId:
+          type: integer
+          format: int64
+        placedAt:
+          type: string
+          format: date-time
+        deliveryDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+          - placed
+          - confirmed
+          - delivered
+          - cancelled
+        total:
+          type: number
+        paid:
+          type: boolean
+        note:
+          type: string
+    OrderView:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        resellerId:
+          type: integer
+          format: int64
+        number:
+          type: integer
+          format: int64
+        placedAt:
+          type: string
+          format: date-time
+        deliveryDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+          - placed
+          - confirmed
+          - delivered
+          - cancelled
+        total:
+          type: number
+        note:
+          type: string
+        paid:
+          type: boolean
+        confirmedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        deliveredAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        cancelledAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        paidAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderLineView"
+    Place:
+      type: object
+      required:
+      - lines
+      - idempotencyKey
+      properties:
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/Line"
+          maxItems: 50
+          minItems: 1
+        note:
+          type: string
+          maxLength: 500
+        idempotencyKey:
+          $ref: "#/components/schemas/UUID"
+    Product:
+      type: object
+      required:
+      - name
+      - unit
+      - price
+      properties:
+        name:
+          type: string
+          pattern: \S
+          maxLength: 80
+        unit:
+          type: string
+          pattern: pack|kg|pc
+        price:
+          type: number
+          exclusiveMinimum: 0
+          multipleOf: 0.01
+        active:
+          type: boolean
+    ProductView:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        unit:
+          type: string
+          enum:
+          - pack
+          - kg
+          - pc
+        price:
+          type: number
+        active:
+          type: boolean
+    ProductionLineView:
+      type: object
+      properties:
+        productId:
+          type: integer
+          format: int64
+        productName:
+          type: string
+        unit:
+          type: string
+        quantity:
+          type: integer
+          format: int64
+        orderCount:
+          type: integer
+          format: int64
+    ProductionRunView:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductionLineView"
+        unconfirmedCount:
+          type: integer
+          format: int64
+    RecentOrderView:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        number:
+          type: integer
+          format: int64
+        deliveryDate:
+          type: string
+          format: date
+        total:
+          type: number
+        status:
+          type: string
+          enum:
+          - placed
+          - confirmed
+          - delivered
+          - cancelled
+        placedAt:
+          type: string
+          format: date-time
+    Reseller:
+      type: object
+      required:
+      - name
+      - mobile
+      properties:
+        name:
+          type: string
+          pattern: \S
+          maxLength: 80
+        mobile:
+          type: string
+          pattern: \S
+    ResellerView:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        mobile:
+          type: string
+        status:
+          type: string
+          enum:
+          - invited
+          - active
+          - blocked
+        token:
+          type: string
+        orderLink:
+          type: string
+        lastOrderAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+    UUID:
+      type: string
+      format: uuid
+      pattern: "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
+    UserView:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        displayName:
+          type:
+          - string
+          - "null"
+        email:
+          type:
+          - string
+          - "null"
+  securitySchemes:
+    SecurityScheme:
+      type: openIdConnect
+      description: Authentication
+paths:
+  /api/me:
+    get:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Me
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+  /api/order/{token}:
+    get:
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogView"
+      summary: Catalog
+      tags:
+      - Reseller Resource
+  /api/order/{token}/orders:
+    post:
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Place"
+        required: true
+      responses:
+        "200":
+          description: Idempotent replay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderView"
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderView"
+        "400":
+          description: Bad Request
+      summary: Place
+      tags:
+      - Reseller Resource
+  /api/order/{token}/orders/{id}:
+    get:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderView"
+      summary: Order
+      tags:
+      - Reseller Resource
+  /api/order/{token}/orders/{id}/cancel:
+    post:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderView"
+      summary: Cancel
+      tags:
+      - Reseller Resource
+  /api/orders:
+    get:
+      parameters:
+      - name: date
+        in: query
+        schema:
+          type: string
+      - name: status
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrderSummaryView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Orders
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+  /api/orders/{id}:
+    get:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Order
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+  /api/orders/{id}/cancel:
+    post:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Cancel
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+  /api/orders/{id}/confirm:
+    post:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Confirm
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+  /api/orders/{id}/deliver:
+    post:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Deliver"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Deliver
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+  /api/orders/{id}/mark-paid:
+    post:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Paid
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+  /api/production-run:
+    get:
+      parameters:
+      - name: date
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductionRunView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Production
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+  /api/products:
+    get:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Products
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Product"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Product
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+  /api/products/{id}:
+    put:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Product"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Product
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+  /api/resellers:
+    get:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ResellerView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Resellers
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Reseller"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResellerView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Reseller
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+  /api/resellers/{id}:
+    put:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Reseller"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResellerView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Reseller
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+  /api/resellers/{id}/{action}:
+    post:
+      parameters:
+      - name: action
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: block|unblock|reissue-link
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResellerView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Reseller Action
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+  /api/settings:
+    put:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Business"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Settings
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+    get:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Settings
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+  /api/tenants:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Business"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Create
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+info:
+  title: county-api API
+  version: 1.0.0-SNAPSHOT
+servers:
+- url: /

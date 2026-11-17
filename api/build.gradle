@@ -5,23 +5,29 @@ plugins {
 
 repositories {
     mavenCentral()
-    mavenLocal()
 }
 
 dependencies {
     implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
-    implementation 'io.quarkus:quarkus-hibernate-orm-panache'
-    implementation 'io.quarkus:quarkus-rest-jackson'
-    implementation 'io.quarkus:quarkus-smallrye-health'
     implementation 'io.quarkus:quarkus-flyway'
+    implementation 'io.quarkus:quarkus-hibernate-validator'
     implementation 'io.quarkus:quarkus-smallrye-openapi'
+    implementation 'io.quarkus:quarkus-rest-jackson'
+    implementation 'io.quarkus:quarkus-oidc'
+    implementation 'io.quarkus:quarkus-hibernate-orm-panache'
+    implementation 'io.quarkus:quarkus-smallrye-health'
     implementation 'io.quarkus:quarkus-jdbc-postgresql'
     implementation 'io.quarkus:quarkus-arc'
+    implementation 'io.quarkus:quarkus-hibernate-orm'
+    implementation 'io.quarkus:quarkus-rest'
     testImplementation 'io.quarkus:quarkus-junit'
+    testImplementation 'io.quarkus:quarkus-test-security'
+    testImplementation 'io.quarkus:quarkus-test-security-oidc'
+    implementation 'org.flywaydb:flyway-database-postgresql'
     testImplementation 'io.rest-assured:rest-assured'
 }
 
-group = 'ph.com.ridgewell'
+group = 'ph.county'
 version = '1.0.0-SNAPSHOT'
 
 java {
@@ -37,3 +43,29 @@ compileJava {
 compileTestJava {
     options.encoding = 'UTF-8'
 }
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+    systemProperty 'java.util.logging.manager', 'org.jboss.logmanager.LogManager'
+    maxParallelForks = 1
+}
+
+// The checked-in response contract is the input for a future generated web client.
+// Refresh intentionally after reviewing an API change; normal builds detect drift.
+tasks.register('updateOpenApi', Copy) {
+    dependsOn 'quarkusBuild'
+    from(layout.buildDirectory.file('openapi/openapi.yaml'))
+    into(layout.projectDirectory.dir('contract'))
+}
+
+tasks.register('verifyOpenApi') {
+    dependsOn 'quarkusBuild'
+    doLast {
+        def generated = layout.buildDirectory.file('openapi/openapi.yaml').get().asFile
+        def committed = layout.projectDirectory.file('contract/openapi.yaml').asFile
+        if (!committed.exists() || generated.text != committed.text) {
+            throw new GradleException('OpenAPI contract drift: review the schema and run ./gradlew updateOpenApi, then commit contract/openapi.yaml')
+        }
+    }
+}
+tasks.named('check') { dependsOn 'verifyOpenApi' }

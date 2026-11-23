@@ -52,6 +52,12 @@ Owner: `/me`, `POST /tenants`, `GET/PUT /settings`, `GET/POST /products`,
 `GET /orders/{id}`, `POST /orders/{id}/{confirm|cancel|deliver|mark-paid}`,
 `GET /production-run?date=YYYY-MM-DD`.
 
+Owner, price tiers (Beyond v1, not yet in scope; see the build plan in
+county-architecture): `GET/POST /price-tiers`, `PUT /price-tiers/{id}`,
+`GET /price-tiers/{id}/prices`, `PUT/DELETE /products/{id}/tier-prices/{tierId}`,
+`PUT /resellers/{id}/price-tier`. A reseller on a tier sees and is charged the
+tier price where one is set, else the product's base price.
+
 Public reseller: `GET /order/{token}`, `POST /order/{token}/orders`,
 `GET /order/{token}/orders/{id}`, `POST /order/{token}/orders/{id}/cancel`.
 
@@ -65,7 +71,8 @@ Do not log bearer tokens/order links. API responses are `no-store` with no refer
   in county-architecture. Each service method is one `@Transactional` unit. Tenant
   numbering, order idempotency and state changes use JPA pessimistic locks, always in
   this order: reseller, business, products by ascending id, order. Keep that order in
-  new workflows. Flyway owns the schema; Hibernate never generates or alters it.
+  new workflows. A product's tier prices are guarded by that product's lock: take
+  it before reading or writing one. Flyway owns the schema; Hibernate never generates or alters it.
 - First sign-in takes a PostgreSQL advisory lock through a native query on the same
   entity manager, so concurrent first calls create one user.
 - Reseller token is stored as a bearer secret so an owner can copy its current link.

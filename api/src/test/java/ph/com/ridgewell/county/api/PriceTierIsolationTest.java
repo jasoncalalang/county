@@ -84,6 +84,22 @@ class PriceTierIsolationTest {
         .put("/api/products/" + own.product + "/tier-prices/" + other.tier)
         .then()
         .statusCode(404);
+    // Clearing a tier price across a tenant is a 404 either way round.
+    given()
+        .basePath("")
+        .delete("/api/products/" + other.product + "/tier-prices/" + other.tier)
+        .then()
+        .statusCode(404);
+    given()
+        .basePath("")
+        .delete("/api/products/" + own.product + "/tier-prices/" + other.tier)
+        .then()
+        .statusCode(404);
+    given()
+        .basePath("")
+        .delete("/api/products/" + other.product + "/tier-prices/" + own.tier)
+        .then()
+        .statusCode(404);
     // Assigning any reseller to a foreign tier is a 404; a foreign reseller is a 404 too.
     given()
         .basePath("")
@@ -113,12 +129,21 @@ class PriceTierIsolationTest {
   @Test
   void tierEndpointsRequireAuthentication() {
     given().basePath("").get("/api/price-tiers").then().statusCode(401);
-    given()
-        .basePath("")
-        .contentType("application/json")
-        .body("{\"name\":\"x\"}")
-        .post("/api/price-tiers")
-        .then()
-        .statusCode(401);
+    given().basePath("").get("/api/price-tiers/1/prices").then().statusCode(401);
+    given().basePath("").delete("/api/products/1/tier-prices/1").then().statusCode(401);
+    for (String[] call :
+        new String[][] {
+          {"POST", "/api/price-tiers", "{\"name\":\"x\"}"},
+          {"PUT", "/api/price-tiers/1", "{\"name\":\"x\"}"},
+          {"PUT", "/api/products/1/tier-prices/1", "{\"price\":1}"},
+          {"PUT", "/api/resellers/1/price-tier", "{\"priceTierId\":1}"}
+        })
+      given()
+          .basePath("")
+          .contentType("application/json")
+          .body(call[2])
+          .request(call[0], call[1])
+          .then()
+          .statusCode(401);
   }
 }

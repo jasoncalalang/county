@@ -36,10 +36,22 @@ public class Orders {
     return DeliveryDates.compute(Instant.now(), ZONE, business.cutoff, weekdays);
   }
 
+  /** Per-product tier prices for a reseller, empty when the reseller has no tier. */
+  private static Map<Long, BigDecimal> tierPrices(Reseller reseller) {
+    if (reseller.priceTierId == null) return Map.of();
+    Map<Long, BigDecimal> prices = new HashMap<>();
+    for (ProductTierPrice p :
+        ProductTierPrice.<ProductTierPrice>list(
+            "tenantId = ?1 and priceTierId = ?2", reseller.tenantId, reseller.priceTierId))
+      prices.put(p.productId, p.price);
+    return prices;
+  }
+
   @Transactional
   public Views.Catalog catalog(String token) {
     var reseller = reseller(token, NONE);
     Business business = Business.findById(reseller.tenantId);
+    Map<Long, BigDecimal> tierPrices = tierPrices(reseller);
     return new Views.Catalog(
         business.name,
         reseller.name,
@@ -48,7 +60,10 @@ public class Orders {
         Product.<Product>list(
                 "tenantId = ?1 and active = true", Sort.by("id"), reseller.tenantId)
             .stream()
-            .map(p -> new Views.CatalogProduct(p.id, p.name, p.unit, p.price))
+            .map(
+                p ->
+                    new Views.CatalogProduct(
+                        p.id, p.name, p.unit, tierPrices.getOrDefault(p.id, p.price)))
             .toList(),
         PurchaseOrder.<PurchaseOrder>find(
                 "tenantId = ?1 and resellerId = ?2",
@@ -105,7 +120,15 @@ public class Orders {
           Product.inTenant(reseller.tenantId, line.productId(), PESSIMISTIC_READ)
               .orElseThrow(() -> new Problem(404, "Not found"));
       if (!product.active) throw new Problem(422, product.name + " is no longer available");
-      var lineTotal = Money.line(product.price, line.quantity());
+      // The reseller's tier price if set, else the product's base price. Captured here and
+      // immutable thereafter (ADR 0012). The product's read lock guards the tier price read.
+      BigDecimal unitPrice =
+          reseller.priceTierId == null
+              ? product.price
+              : ProductTierPrice.of(reseller.tenantId, product.id, reseller.priceTierId)
+                  .map(t -> t.price)
+                  .orElse(product.price);
+      var lineTotal = Money.line(unitPrice, line.quantity());
       total = total.add(lineTotal);
       if (total.compareTo(MAXIMUM) > 0) throw new Problem(422, "Order total is too large");
       var saved = new OrderLine();
@@ -114,7 +137,7 @@ public class Orders {
       saved.productName = product.name;
       saved.unit = product.unit;
       saved.quantity = line.quantity();
-      saved.price = product.price;
+      saved.price = unitPrice;
       saved.total = lineTotal;
       lines.add(saved);
     }

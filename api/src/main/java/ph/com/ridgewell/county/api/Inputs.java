@@ -33,4 +33,12 @@ public final class Inputs {
       @NotNull UUID idempotencyKey) {}
 
   public record Deliver(@NotNull Boolean paid) {}
+
+  public record PriceTier(@NotBlank @Size(max = 80) String name, Boolean active) {}
+
+  public record TierPrice(
+      @NotNull @DecimalMin(value = "0", inclusive = false) @Digits(integer = 10, fraction = 2)
+          BigDecimal price) {}
+
+  public record ResellerTier(@Positive Long priceTierId) {}
 }

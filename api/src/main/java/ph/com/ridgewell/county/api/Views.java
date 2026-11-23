@@ -44,7 +44,22 @@ public final class Views {
       @Schema(enumeration = {"invited", "active", "blocked"}) String status,
       String token,
       String orderLink,
-      @Schema(format = "date-time", nullable = true) String lastOrderAt) {}
+      @Schema(format = "date-time", nullable = true) String lastOrderAt,
+      @Schema(nullable = true) Long priceTierId) {}
+
+  @Schema(name = "PriceTierView")
+  public record PriceTier(long id, String name, boolean active) {}
+
+  @Schema(name = "TierProductPriceView")
+  public record TierProductPrice(
+      long productId,
+      String productName,
+      @Schema(enumeration = {"pack", "kg", "pc"}) String unit,
+      BigDecimal basePrice,
+      @Schema(nullable = true) BigDecimal tierPrice) {}
+
+  @Schema(name = "TierPricesView")
+  public record TierPrices(long id, String name, boolean active, List<TierProductPrice> products) {}
 
   @Schema(name = "OrderLineView")
   public record OrderLine(

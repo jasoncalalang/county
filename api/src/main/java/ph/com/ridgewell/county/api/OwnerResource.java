@@ -162,4 +162,58 @@ public class OwnerResource {
   public Views.ProductionRun production(@QueryParam("date") String date) {
     return orders.production(subject(), date);
   }
+
+  @GET
+  @Path("price-tiers")
+  public List<Views.PriceTier> priceTiers() {
+    return owners.priceTiers(subject());
+  }
+
+  @POST
+  @Path("price-tiers")
+  @APIResponse(
+      responseCode = "201",
+      content = @Content(schema = @Schema(implementation = Views.PriceTier.class)))
+  public Response priceTier(
+      @jakarta.validation.constraints.NotNull @Valid Inputs.PriceTier input) {
+    return Response.status(201).entity(owners.priceTier(subject(), null, input)).build();
+  }
+
+  @PUT
+  @Path("price-tiers/{id}")
+  public Views.PriceTier priceTier(
+      @PathParam("id") long id,
+      @jakarta.validation.constraints.NotNull @Valid Inputs.PriceTier input) {
+    return owners.priceTier(subject(), id, input);
+  }
+
+  @GET
+  @Path("price-tiers/{id}/prices")
+  public Views.TierPrices tierPrices(@PathParam("id") long id) {
+    return owners.tierPrices(subject(), id);
+  }
+
+  @PUT
+  @Path("products/{id}/tier-prices/{tierId}")
+  public Views.TierPrices setTierPrice(
+      @PathParam("id") long id,
+      @PathParam("tierId") long tierId,
+      @jakarta.validation.constraints.NotNull @Valid Inputs.TierPrice input) {
+    return owners.setTierPrice(subject(), id, tierId, input);
+  }
+
+  @DELETE
+  @Path("products/{id}/tier-prices/{tierId}")
+  public Response clearTierPrice(@PathParam("id") long id, @PathParam("tierId") long tierId) {
+    owners.clearTierPrice(subject(), id, tierId);
+    return Response.noContent().build();
+  }
+
+  @PUT
+  @Path("resellers/{id}/price-tier")
+  public Views.Reseller resellerTier(
+      @PathParam("id") long id,
+      @jakarta.validation.constraints.NotNull @Valid Inputs.ResellerTier input) {
+    return owners.assignResellerTier(subject(), id, input);
+  }
 }

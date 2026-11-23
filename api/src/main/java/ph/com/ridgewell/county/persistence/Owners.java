@@ -1,6 +1,7 @@
 package ph.com.ridgewell.county.persistence;
 
 import static jakarta.persistence.LockModeType.NONE;
+import static jakarta.persistence.LockModeType.PESSIMISTIC_READ;
 import static jakarta.persistence.LockModeType.PESSIMISTIC_WRITE;
 
 import io.quarkus.panache.common.Sort;
@@ -294,8 +295,10 @@ public class Owners {
     if (input.priceTierId() == null) {
       reseller.priceTierId = null;
     } else {
+      // Read-locked after the reseller (reseller -> tier), so a concurrent deactivation, which
+      // holds the tier's write lock, finishes first and the active check sees its result.
       var tier =
-          PriceTier.inTenant(tenant, input.priceTierId(), NONE)
+          PriceTier.inTenant(tenant, input.priceTierId(), PESSIMISTIC_READ)
               .orElseThrow(() -> new Problem(404, "Not found"));
       if (!tier.active) throw new Problem(422, "Price tier is not active");
       reseller.priceTierId = tier.id;

@@ -204,6 +204,7 @@ public class OwnerResource {
 
   @DELETE
   @Path("products/{id}/tier-prices/{tierId}")
+  @APIResponse(responseCode = "204", description = "No Content")
   public Response clearTierPrice(@PathParam("id") long id, @PathParam("tierId") long tierId) {
     owners.clearTierPrice(subject(), id, tierId);
     return Response.noContent().build();

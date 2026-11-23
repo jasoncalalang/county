@@ -992,11 +992,8 @@ paths:
           type: integer
           format: int64
       responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: {}
+        "204":
+          description: No Content
         "401":
           description: Not Authorized
         "403":

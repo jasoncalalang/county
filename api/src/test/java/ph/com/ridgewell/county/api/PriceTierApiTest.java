@@ -183,6 +183,10 @@ class PriceTierApiTest {
         .then()
         .statusCode(204);
     bigEquals("120.00", catalogPrice(rosa, product));
+    // A tiered reseller is also charged the base price at placement when the tier has no row.
+    var fallback = place(rosa, product, 1, UUID.randomUUID().toString());
+    bigEquals("120.00", fallback.getString("lines[0].price"));
+    bigEquals("120.00", fallback.getString("total"));
 
     // Clearing Rosa's tier assignment also reverts her to the base price.
     given()
@@ -194,6 +198,81 @@ class PriceTierApiTest {
         .statusCode(200)
         .body("priceTierId", org.hamcrest.Matchers.nullValue());
     bigEquals("120.00", catalogPrice(rosa, product));
+  }
+
+  @Test
+  @TestSecurity(
+      user = "tier-mixed",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "tier-mixed")})
+  void tieredResellerPaysTierPriceOnlyForProductsThatHaveOne() {
+    given()
+        .basePath("")
+        .contentType("application/json")
+        .body("{\"name\":\"Nena\",\"cutoff\":\"16:00\",\"deliveryDays\":[1,2,3,4,5,6,7]}")
+        .post("/api/tenants")
+        .then()
+        .statusCode(201);
+    int priced = newProduct("Hamonado", 120);
+    int unpriced = newProduct("Longganisa", 80);
+    int tier =
+        given()
+            .basePath("")
+            .contentType("application/json")
+            .body("{\"name\":\"Wholesale\"}")
+            .post("/api/price-tiers")
+            .then()
+            .statusCode(201)
+            .extract()
+            .path("id");
+    given()
+        .basePath("")
+        .contentType("application/json")
+        .body("{\"price\":100}")
+        .put("/api/products/" + priced + "/tier-prices/" + tier)
+        .then()
+        .statusCode(200);
+    String rosa = token(0, "Rosa", "09171234567");
+    given()
+        .basePath("")
+        .contentType("application/json")
+        .body("{\"priceTierId\":" + tier + "}")
+        .put("/api/resellers/" + rosaId(rosa) + "/price-tier")
+        .then()
+        .statusCode(200);
+
+    var order =
+        given()
+            .basePath("")
+            .contentType("application/json")
+            .body(
+                "{\"lines\":[{\"productId\":"
+                    + priced
+                    + ",\"quantity\":2},{\"productId\":"
+                    + unpriced
+                    + ",\"quantity\":3}],\"idempotencyKey\":\""
+                    + UUID.randomUUID()
+                    + "\"}")
+            .post("/api/order/" + rosa + "/orders")
+            .then()
+            .statusCode(201)
+            .extract()
+            .jsonPath();
+    bigEquals("100.00", order.getString("lines.find{it.productId==" + priced + "}.price"));
+    bigEquals("80.00", order.getString("lines.find{it.productId==" + unpriced + "}.price"));
+    bigEquals("440.00", order.getString("total"));
+  }
+
+  private int newProduct(String name, int price) {
+    return given()
+        .basePath("")
+        .contentType("application/json")
+        .body("{\"name\":\"" + name + "\",\"unit\":\"pack\",\"price\":" + price + "}")
+        .post("/api/products")
+        .then()
+        .statusCode(201)
+        .extract()
+        .path("id");
   }
 
   // The reseller id is not exposed on the token page; look it up from the owner's list by token.

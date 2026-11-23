@@ -10,6 +10,9 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.UUID;
+import io.quarkus.test.security.TestSecurity;
+import io.quarkus.test.security.oidc.Claim;
+import io.quarkus.test.security.oidc.OidcSecurity;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.Test;
 
@@ -98,6 +101,78 @@ class PriceTierConcurrencyTest {
       assertEquals(
           0, new BigDecimal("300.00").compareTo(new BigDecimal(response.jsonPath().getString("total"))));
     }
+  }
+
+  @Test
+  @TestSecurity(
+      user = "tier-assign-race",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "tier-assign-race")})
+  void assignmentWaitsForTierDeactivationAndThenRejectsTheInactiveTier() throws Exception {
+    long reseller;
+    long tier;
+    try (Connection c = source.getConnection()) {
+      long tenant = TestOwners.createBusiness(c, "tier-assign-race");
+      tier =
+          ConcurrentOrderingTest.insert(
+              c, "INSERT INTO price_tier(tenant_id,name) VALUES (?,'Wholesale') RETURNING id", tenant);
+      reseller =
+          ConcurrentOrderingTest.insert(
+              c,
+              "INSERT INTO reseller(tenant_id,name,mobile,token) VALUES (?,'Buyer','+639171234567',?)"
+                  + " RETURNING id",
+              tenant,
+              UUID.randomUUID().toString().replace("-", "").substring(0, 22));
+    }
+    try (var pool = Executors.newSingleThreadExecutor();
+        Connection c = source.getConnection()) {
+      c.setAutoCommit(false);
+      // The owner's deactivation holds the tier row's write lock, uncommitted.
+      try (var update = c.prepareStatement("UPDATE price_tier SET active=false WHERE id=?")) {
+        update.setLong(1, tier);
+        update.executeUpdate();
+      }
+      var result =
+          pool.submit(
+              () ->
+                  given()
+                      .basePath("")
+                      .contentType("application/json")
+                      .body("{\"priceTierId\":" + tier + "}")
+                      .put("/api/resellers/" + reseller + "/price-tier"));
+      awaitTierWait();
+      assertFalse(result.isDone(), "assignment must wait for the in-flight tier deactivation");
+      c.commit();
+      var response = result.get(30, TimeUnit.SECONDS);
+      assertEquals(422, response.statusCode(), response.asString());
+    }
+    try (Connection c = source.getConnection();
+        var s = c.prepareStatement("SELECT price_tier_id FROM reseller WHERE id=?")) {
+      s.setLong(1, reseller);
+      try (var r = s.executeQuery()) {
+        r.next();
+        assertEquals(0L, r.getLong(1));
+        assertTrue(r.wasNull(), "the reseller must not be assigned to the inactive tier");
+      }
+    }
+  }
+
+  private void awaitTierWait() throws Exception {
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+    try (Connection c = source.getConnection();
+        var s =
+            c.prepareStatement(
+                "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND"
+                    + " wait_event_type='Lock' AND query ILIKE '%from price_tier %for share%'")) {
+      while (System.nanoTime() < deadline) {
+        try (var r = s.executeQuery()) {
+          r.next();
+          if (r.getInt(1) > 0) return;
+        }
+        Thread.sleep(25);
+      }
+    }
+    fail("Assignment never reached the price tier lock");
   }
 
   private void awaitProductWait(Fixture f) throws Exception {

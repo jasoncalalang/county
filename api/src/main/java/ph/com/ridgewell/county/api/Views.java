@@ -55,17 +55,23 @@ public final class Views {
       BigDecimal price,
       BigDecimal total) {}
 
+  @Schema(name = "OrderItemView", description = "One line of an order, as the order list shows it")
+  public record OrderItem(
+      String productName, @Schema(enumeration = {"pack", "kg", "pc"}) String unit, int quantity) {}
+
   @Schema(name = "OrderSummaryView")
   public record OrderSummary(
       long id,
       long number,
       long resellerId,
+      String resellerName,
       @Schema(format = "date-time") String placedAt,
       @Schema(format = "date") String deliveryDate,
       @Schema(enumeration = {"placed", "confirmed", "delivered", "cancelled"}) String status,
       BigDecimal total,
       boolean paid,
-      String note) {}
+      String note,
+      @Schema(description = "Lines in the order they were entered") List<OrderItem> items) {}
 
   @Schema(name = "RecentOrderView")
   public record RecentOrder(
@@ -80,6 +86,7 @@ public final class Views {
   public record Order(
       long id,
       long resellerId,
+      String resellerName,
       long number,
       @Schema(format = "date-time") String placedAt,
       @Schema(format = "date") String deliveryDate,
@@ -101,6 +108,14 @@ public final class Views {
       @Schema(format = "time") String cutoff,
       List<CatalogProduct> products,
       List<RecentOrder> recentOrders) {}
+
+  @Schema(name = "SettingsPreviewView")
+  public record SettingsPreview(
+      @Schema(
+              format = "date",
+              description = "Delivery date of an order placed now with these settings")
+          String deliveryDate,
+      @Schema(description = "IANA timezone the cut-off is compared in") String timeZone) {}
 
   @Schema(name = "ProductionLineView")
   public record ProductionLine(

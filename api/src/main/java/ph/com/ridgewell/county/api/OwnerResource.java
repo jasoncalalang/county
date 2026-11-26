@@ -59,6 +59,18 @@ public class OwnerResource {
     return owners.settings(subject(), input);
   }
 
+  /**
+   * The delivery date an order placed now would get with these settings, for the settings and
+   * set-up forms. Takes unsaved values, so it needs a signed-in owner but no business.
+   */
+  @GET
+  @Path("settings/preview")
+  public Views.SettingsPreview preview(
+      @QueryParam("cutoff") String cutoff, @QueryParam("deliveryDays") List<String> deliveryDays) {
+    subject();
+    return Owners.preview(cutoff, deliveryDays);
+  }
+
   @GET
   @Path("products")
   public List<Views.Product> products() {
@@ -121,7 +133,7 @@ public class OwnerResource {
   public List<Views.OrderSummary> orders(
       @QueryParam("date") String date, @QueryParam("status") String status) {
     if (date == null && uri.getQueryParameters().containsKey("date"))
-      throw new Problem(422, "Invalid delivery date");
+      throw Problem.field("date", "Enter a date such as 2026-11-05");
     return orders.list(subject(), date, status);
   }
 

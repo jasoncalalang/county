@@ -20,6 +20,7 @@ public class OwnerResource {
   @Inject Owners owners;
   @jakarta.ws.rs.core.Context jakarta.ws.rs.core.UriInfo uri;
   @Inject Orders orders;
+  @Inject Quotes quotes;
 
   private String subject() {
     String s = identity.getPrincipal() instanceof JsonWebToken jwt ? jwt.getSubject() : null;
@@ -228,5 +229,39 @@ public class OwnerResource {
       @PathParam("id") long id,
       @jakarta.validation.constraints.NotNull @Valid Inputs.ResellerTier input) {
     return owners.assignResellerTier(subject(), id, input);
+  }
+
+  @GET
+  @Path("quotes")
+  public List<Views.QuoteSummary> quotes(
+      @QueryParam("status") String status, @QueryParam("resellerId") String resellerId) {
+    return quotes.list(subject(), status, resellerId);
+  }
+
+  @POST
+  @Path("quotes")
+  @APIResponse(
+      responseCode = "201",
+      content = @Content(schema = @Schema(implementation = Views.Quote.class)))
+  public Response quote(@jakarta.validation.constraints.NotNull @Valid Inputs.Quote input) {
+    return Response.status(201).entity(quotes.create(subject(), input)).build();
+  }
+
+  @GET
+  @Path("quotes/{id}")
+  public Views.Quote quote(@PathParam("id") long id) {
+    return quotes.get(subject(), id);
+  }
+
+  @POST
+  @Path("quotes/{id}/send")
+  public Views.Quote sendQuote(@PathParam("id") long id) {
+    return quotes.send(subject(), id);
+  }
+
+  @POST
+  @Path("quotes/{id}/cancel")
+  public Views.Quote cancelQuote(@PathParam("id") long id) {
+    return quotes.cancel(subject(), id);
   }
 }

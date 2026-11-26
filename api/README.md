@@ -59,8 +59,24 @@ county-architecture): `GET/POST /price-tiers`, `PUT /price-tiers/{id}`,
 `PUT /resellers/{id}/price-tier`. A reseller on a tier sees and is charged the
 tier price where one is set, else the product's base price.
 
+Owner, quotes (Beyond v1; build plan §3 in county-architecture):
+`GET /quotes?status=&resellerId=`, `POST /quotes`, `GET /quotes/{id}`,
+`POST /quotes/{id}/{send|cancel}`. A quote prices its lines for one reseller as an order
+placed now would be (tier price, else base price) and captures them. Only a sent quote
+shows on the reseller's link.
+
 Public reseller: `GET /order/{token}`, `POST /order/{token}/orders`,
-`GET /order/{token}/orders/{id}`, `POST /order/{token}/orders/{id}/cancel`.
+`GET /order/{token}/orders/{id}`, `POST /order/{token}/orders/{id}/cancel`,
+`GET /order/{token}/quotes` (open quotes), `GET /order/{token}/quotes/{id}`,
+`POST /order/{token}/quotes/{id}/accept` (body `{idempotencyKey}`; 201 with the new order,
+200 with the order an accepted quote already placed), `POST /order/{token}/quotes/{id}/decline`.
+
+Accepting a quote places an order at the quote's captured prices, even if a product's
+price has changed or it has been deactivated since; placing an order directly uses today's
+prices and refuses inactive products. The order gets the delivery date of an order placed
+at acceptance, not the estimate shown on the quote. Quotes expire on read: a sent quote
+reads as `expired` the day after its `expiresOn`, and can no longer be accepted or
+declined. Quote numbers are a per-business sequence separate from order numbers.
 
 Date filters are delivery dates. Money is decimal PHP, quantity whole units. Status
 strings are lowercase. The order list includes each order's `resellerName` and its
@@ -91,6 +107,11 @@ Do not log bearer tokens/order links. API responses are `no-store` with no refer
   taken in this order. Add a line here in the PR that adds a target.
   1. `price_tier`: assigning a reseller's tier share-locks it after the reseller, so a
      concurrent deactivation commits first.
+  2. `quote`: accepting locks it after the reseller and business (it locks no product,
+     since the order copies the quote's captured prices); the order it inserts is not a
+     lock target. Send, cancel and decline lock only the quote. Creating a quote takes no
+     quote lock: it share-locks the reseller, locks the business for the quote number,
+     then share-locks products by ascending id.
 - First sign-in takes a PostgreSQL advisory lock through a native query on the same
   entity manager, so concurrent first calls create one user.
 - Reseller token is stored as a bearer secret so an owner can copy its current link.

@@ -3,6 +3,7 @@ package ph.com.ridgewell.county.api;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -41,4 +42,19 @@ public final class Inputs {
           BigDecimal price) {}
 
   public record ResellerTier(@Positive Long priceTierId) {}
+
+  /**
+   * A new quote. Prices, number, status and delivery date come from the server: lines are priced
+   * for the reseller as an order placed now would be.
+   */
+  public record Quote(
+      @NotNull @Positive Long resellerId,
+      @NotEmpty @Size(max = 50) List<@NotNull @Valid Line> lines,
+      @Size(max = 500) String note,
+      @NotNull
+          @org.eclipse.microprofile.openapi.annotations.media.Schema(
+              description = "Last day the reseller can accept, in the business timezone")
+          LocalDate expiresOn) {}
+
+  public record AcceptQuote(@NotNull UUID idempotencyKey) {}
 }

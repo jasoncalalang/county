@@ -1,5 +1,5 @@
 // Pure helpers for the dashboard's order screens, kept apart so they can be tested.
-import type { OrderSummaryView } from "../api-types";
+import type { OrderItemView, OrderSummaryView } from "../api-types";
 import { formatMoney, manilaDate, type Status } from "../format";
 
 const RANK: Record<Status, number> = { placed: 0, confirmed: 1, delivered: 2, cancelled: 3 };
@@ -23,6 +23,11 @@ export function summarize(orders: Pick<OrderSummaryView, "status" | "total">[]):
     main: `${orders.length} ${orders.length === 1 ? "order" : "orders"} · ${formatMoney(total / 100)}`,
     warning: placed ? `${placed} ${placed === 1 ? "needs" : "need"} confirmation` : null,
   };
+}
+
+/** "10 pack Longganisa Hamonado, 5 kg Tocino", one line per row (UI design 6.3). */
+export function itemsSummary(items: OrderItemView[] | undefined): string {
+  return (items ?? []).map((i) => `${i.quantity} ${i.unit} ${i.productName}`).join(", ");
 }
 
 function addDays(iso: string, days: number): string {
@@ -50,15 +55,23 @@ export function stepDeliveryDay(iso: string, deliveryDays: number[], direction: 
 
 /**
  * The date the Orders and Production run pages open on: the earliest delivery date with an
- * order not yet delivered or cancelled, else the first delivery day after today.
- * GUESS: the API has no "next delivery date" for the owner, so the fallback is the next
- * configured delivery day after today in Manila; it ignores the cut-off.
+ * order not yet delivered or cancelled, else the next delivery date, which the API's settings
+ * preview gives. `next` is only absent when that call failed; then the next configured
+ * delivery day after today stands in.
  */
 export function defaultDeliveryDate(
   open: Pick<OrderSummaryView, "deliveryDate">[],
   deliveryDays: number[],
+  next?: string,
   now: Date = new Date(),
 ): string {
   const earliest = open.map((o) => o.deliveryDate).sort()[0];
-  return earliest ?? stepDeliveryDay(manilaDate(now), deliveryDays, 1);
+  return earliest ?? next ?? stepDeliveryDay(manilaDate(now), deliveryDays, 1);
+}
+
+/** The settings preview's query string: `cutoff=16:00&deliveryDays=1&deliveryDays=4`. */
+export function previewQuery(cutoff: string, deliveryDays: number[]): string {
+  const query = new URLSearchParams({ cutoff: cutoff.slice(0, 5) });
+  for (const day of deliveryDays) query.append("deliveryDays", String(day));
+  return query.toString();
 }

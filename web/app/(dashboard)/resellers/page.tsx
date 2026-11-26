@@ -282,8 +282,9 @@ function AddReseller({
       onAdded(await api.post<ResellerView>("/resellers", { name, mobile }));
       setErrors({});
     } catch (error) {
-      // GUESS: the API answers an invalid number with a bare 422 and a duplicate with a 409.
-      if (error instanceof ApiError && error.status === 422) setErrors({ mobile: "Enter a Philippine mobile number" });
+      // The API names the field at fault; a duplicate number is a 409 with no field.
+      if (error instanceof ApiError && Object.keys(error.fields).length)
+        setErrors({ name: error.fields.name, mobile: error.fields.mobile, form: error.fields.body });
       else if (error instanceof ApiError && error.status === 409)
         setErrors({ mobile: "Another reseller already has this number." });
       else setErrors({ form: "Could not save, try again" });

@@ -45,6 +45,11 @@ export async function showPriceList(token: string, fetchImpl?: Fetch, state?: Fo
   const api = resellerApi(fetchImpl);
   const catalog = await api.catalog(token);
   if (!catalog.ok) return catalog.status === 404 ? inactive() : htmlResponse(unavailablePage(token), 503);
+  if (state) {
+    // Only rows still on the price list can carry a link to themselves.
+    const listed = new Set(catalog.body.products.map((p) => p.id));
+    state = { ...state, errors: state.errors.map((e) => (e.productId && !listed.has(e.productId) ? { message: e.message } : e)) };
+  }
   const page = priceListPage(token, catalog.body, crypto.randomUUID(), state);
   return state?.errors.length ? htmlResponse(page, 422) : htmlResponse(page, 200, PRICE_LIST_CACHE);
 }
@@ -85,10 +90,19 @@ export async function placeOrder(token: string, form: FormData, fetchImpl?: Fetc
     if (!catalog.ok) return inactive();
     return again([{ message: "Some products are no longer available." }]);
   }
-  if (placed.status === 422 && placed.problem.detail) {
-    // The API names the product: "Tocino is no longer available". The fresh price list no
-    // longer has that row, so the message stands in the error block on its own.
-    return again([{ message: placed.problem.detail.endsWith(".") ? placed.problem.detail : `${placed.problem.detail}.` }]);
+  if (placed.status === 422) {
+    // Field errors are keyed by JSON path into what was sent, e.g. `lines[1].productId`:
+    // "Tocino is no longer available". A deactivated product is gone from the fresh price
+    // list, so its message stands in the error block with a link only when the row remains.
+    const fields = Object.entries(placed.problem.errors ?? {});
+    const more = fields.length
+      ? fields.map(([path, message]) => {
+          const index = /^lines\[(\d+)\]/.exec(path);
+          const productId = index ? lines[Number(index[1])]?.productId : undefined;
+          return { message: message.endsWith(".") ? message : `${message}.`, productId };
+        })
+      : [{ message: "Please check your order and place it again." }];
+    return again(more);
   }
   if (placed.status === 409) return again([{ message: "Please check your order and place it again." }]);
   return htmlResponse(unavailablePage(token), 503);

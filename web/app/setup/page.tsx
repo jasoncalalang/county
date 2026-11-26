@@ -39,6 +39,7 @@ export default function SetupPage() {
     } catch (error) {
       // A second tab may have created the business first.
       if (error instanceof ApiError && error.status === 409) router.replace("/orders");
+      else if (error instanceof ApiError && Object.keys(error.fields).length) setErrors(error.fields);
       else setFailed(true);
       setBusy(false);
     }

@@ -71,6 +71,9 @@ test("1-3: set up the business, add products and a reseller", async ({ browser, 
   await page.getByRole("button", { name: "Add reseller" }).first().click();
   const add = page.getByRole("dialog", { name: "Add reseller" });
   await add.getByLabel("Name").fill("Aling Rosa");
+  await add.getByLabel("Mobile number").fill("12345");
+  await add.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(add.getByText("Enter a Philippine mobile number")).toBeVisible();
   await add.getByLabel("Mobile number").fill("0917 123 4567");
   await add.getByRole("button", { name: "Add", exact: true }).click();
   const reveal = page.getByRole("dialog", { name: "Send this link to Aling Rosa" });
@@ -125,6 +128,7 @@ test("7-10: the wholesaler confirms, delivers, marks paid and blocks", async ({ 
   const row = page.getByRole("row", { name: /#1/ });
   await expect(row).toHaveCount(1);
   await expect(row.getByText("Aling Rosa")).toBeVisible();
+  await expect(row.getByText("10 pack Longganisa Hamonado, 5 kg Tocino")).toBeVisible();
   await expect(row.getByText("Placed")).toBeVisible();
   await expect(page.getByText("1 order · ₱2,800.00")).toBeVisible();
   await shot(page, "07-orders");
@@ -169,6 +173,18 @@ test("7-10: the wholesaler confirms, delivers, marks paid and blocks", async ({ 
   await expect(rosa.getByText("Active")).toBeVisible();
   await reseller.goto(link);
   await expect(reseller.getByText("Ordering as Aling Rosa")).toBeVisible();
+});
+
+test("settings preview the delivery date as the fields change", async ({ browser, baseURL }) => {
+  const page = await signedIn(browser, baseURL!);
+  await page.goto("/settings");
+  const preview = page.getByText(/^An order placed now would be delivered on \w{3}, \d{1,2} \w{3}\.$/);
+  await expect(preview).toBeVisible();
+  for (const day of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]) await page.getByLabel(day).uncheck();
+  await expect(preview).toHaveCount(0);
+  await page.getByLabel("Sun").check();
+  await expect(page.getByText(/^An order placed now would be delivered on Sun, \d{1,2} \w{3}\.$/)).toBeVisible();
+  await shot(page, "10-settings");
 });
 
 test("the order page works with JavaScript off, including cancel", async ({ browser }) => {

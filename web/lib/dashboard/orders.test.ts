@@ -1,5 +1,13 @@
 import { describe, expect, test } from "vitest";
-import { countByStatus, defaultDeliveryDate, sortOrders, stepDeliveryDay, summarize } from "./orders";
+import {
+  countByStatus,
+  defaultDeliveryDate,
+  itemsSummary,
+  previewQuery,
+  sortOrders,
+  stepDeliveryDay,
+  summarize,
+} from "./orders";
 
 const o = (status: "placed" | "confirmed" | "delivered" | "cancelled", placedAt: string, total = 100) => ({
   status,
@@ -40,7 +48,21 @@ describe("orders list", () => {
     expect(defaultDeliveryDate([{ deliveryDate: "2026-11-28" }, { deliveryDate: "2026-11-27" }], [1, 2, 3, 4, 5, 6])).toBe(
       "2026-11-27",
     );
-    // Saturday 28 Nov 2026, 10:00 in Manila; Monday to Saturday delivery: next is Monday.
-    expect(defaultDeliveryDate([], [1, 2, 3, 4, 5, 6], new Date("2026-11-28T02:00:00Z"))).toBe("2026-11-30");
+    expect(defaultDeliveryDate([], [1, 2, 3, 4, 5, 6], "2026-12-01")).toBe("2026-12-01");
+    // Without the API's answer: Saturday 28 Nov 2026 in Manila, Monday to Saturday: Monday.
+    expect(defaultDeliveryDate([], [1, 2, 3, 4, 5, 6], undefined, new Date("2026-11-28T02:00:00Z"))).toBe("2026-11-30");
+  });
+
+  test("items read as one line of quantity, unit and product", () => {
+    expect(
+      itemsSummary([
+        { productName: "Hamonado", unit: "pack", quantity: 10 },
+        { productName: "Tocino", unit: "kg", quantity: 5 },
+      ]),
+    ).toBe("10 pack Hamonado, 5 kg Tocino");
+  });
+
+  test("the preview query repeats deliveryDays and trims seconds from the cut-off", () => {
+    expect(previewQuery("16:00:00", [1, 4])).toBe("cutoff=16%3A00&deliveryDays=1&deliveryDays=4");
   });
 });

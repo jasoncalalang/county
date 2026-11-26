@@ -20,6 +20,7 @@ const order: OrderView = {
   id: 41,
   number: 1,
   resellerId: 7,
+  resellerName: "Aling Rosa",
   placedAt: "2026-11-26T02:00:00Z",
   deliveryDate: "2026-11-27",
   status: "placed",
@@ -164,12 +165,27 @@ describe("placing an order", () => {
   });
 
   test("a product deactivated since render re-renders with its name and keeps quantities", async () => {
-    routes[`POST /order/${TOKEN}/orders`] = () => ({ status: 422, body: { status: 422, detail: "Tocino is no longer available" } });
+    routes[`POST /order/${TOKEN}/orders`] = () => ({
+      status: 422,
+      body: { status: 422, detail: "Check the submitted fields", errors: { "lines[1].productId": "Tocino is no longer available" } },
+    });
     routes[`GET /order/${TOKEN}`] = () => ({ status: 200, body: { ...catalog, products: [catalog.products[0]] } });
     const page = await (await placeOrder(TOKEN, form({ idempotencyKey: KEY, q1: "10", q3: "5" }), fakeFetch)).text();
 
-    expect(page).toContain("Tocino is no longer available.");
+    expect(page).toContain("<p>Tocino is no longer available.</p>");
+    expect(page).not.toContain("Check the submitted fields");
     expect(page).toContain('id="q1" name="q1" value="10"');
+  });
+
+  test("a field error on a row still listed links to that row", async () => {
+    routes[`POST /order/${TOKEN}/orders`] = () => ({
+      status: 422,
+      body: { status: 422, detail: "Check the submitted fields", errors: { "lines[0].quantity": "must be less than or equal to 9999" } },
+    });
+    const page = await (await placeOrder(TOKEN, form({ idempotencyKey: KEY, q1: "10" }), fakeFetch)).text();
+
+    expect(page).toContain('<a href="#q1">must be less than or equal to 9999.</a>');
+    expect(page).toContain('class="row bad" for="q1"');
   });
 
   test("a token blocked between render and submit shows the inactive page", async () => {

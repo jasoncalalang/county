@@ -56,6 +56,8 @@ export default function ProductsPage() {
       // the API refuses with 409 "Unit cannot change after ordering".
       if (error instanceof ApiError && error.status === 409 && change.unit) toast("This product is in use; its unit cannot change.", "error");
       else if (error instanceof ApiError && error.status === 409) toast("Another active product has that name.", "error");
+      else if (error instanceof ApiError && Object.keys(error.fields).length)
+        toast(Object.values(error.fields)[0], "error");
       else if (!(error instanceof ApiError && error.status === 401)) toast("Could not save, try again", "error");
       return false;
     }
@@ -275,6 +277,8 @@ function AddProduct({
       form.reset();
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) setErrors({ name: "An active product already has this name." });
+      else if (error instanceof ApiError && Object.keys(error.fields).length)
+        setErrors({ name: error.fields.name ?? error.fields.unit, price: error.fields.price, form: error.fields.body });
       else setErrors({ form: "Could not save, try again" });
     } finally {
       setBusy(false);

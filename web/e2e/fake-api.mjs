@@ -16,12 +16,12 @@ const now = () => new Date().toISOString();
 const token = () => randomBytes(16).toString("base64url");
 
 /** Tomorrow in Manila, then the next configured delivery day. Good enough for a fake. */
-function deliveryDate() {
+function deliveryDate(days = db.tenant.deliveryDays) {
   const manila = new Date(Date.now() + 8 * 3600_000);
   for (let i = 1; i <= 8; i += 1) {
     const d = new Date(Date.UTC(manila.getUTCFullYear(), manila.getUTCMonth(), manila.getUTCDate() + i));
     const iso = d.getUTCDay() === 0 ? 7 : d.getUTCDay();
-    if (db.tenant.deliveryDays.includes(iso)) return d.toISOString().slice(0, 10);
+    if (days.includes(iso)) return d.toISOString().slice(0, 10);
   }
 }
 
@@ -29,14 +29,17 @@ function send(res, status, body) {
   res.writeHead(status, { "content-type": status >= 400 ? "application/problem+json" : "application/json" });
   res.end(body === undefined ? "" : JSON.stringify(body));
 }
-const problem = (res, status, detail) => send(res, status, { type: "about:blank", status, detail });
+const problem = (res, status, detail, errors = {}) => send(res, status, { type: "about:blank", status, detail, errors });
+const field = (res, path, message) => problem(res, 422, "Check the submitted fields", { [path]: message });
+const resellerName = (o) => db.resellers.find((r) => r.id === o.resellerId)?.name;
 
 function orderView(o) {
-  return { ...o, lines: o.lines.map((l) => ({ ...l })) };
+  return { ...o, resellerName: resellerName(o), lines: o.lines.map((l) => ({ ...l })) };
 }
 function summary(o) {
   const { id, number, resellerId, placedAt, deliveryDate, status, total, paid, note } = o;
-  return { id, number, resellerId, placedAt, deliveryDate, status, total, paid, note };
+  const items = o.lines.map(({ productName, unit, quantity }) => ({ productName, unit, quantity }));
+  return { id, number, resellerId, resellerName: resellerName(o), placedAt, deliveryDate, status, total, paid, note, items };
 }
 
 function transition(o, target, actor, paid) {
@@ -97,10 +100,10 @@ createServer(async (req, res) => {
         const seen = db.keys.get(input.idempotencyKey);
         if (seen) return send(res, 200, orderView(seen));
         const lines = [];
-        for (const line of input.lines) {
+        for (const [i, line] of input.lines.entries()) {
           const p = db.products.find((q) => q.id === line.productId);
           if (!p) return problem(res, 404, "Not found");
-          if (!p.active) return problem(res, 422, `${p.name} is no longer available`);
+          if (!p.active) return field(res, `lines[${i}].productId`, `${p.name} is no longer available`);
           lines.push({ productId: p.id, productName: p.name, unit: p.unit, quantity: line.quantity, price: p.price, total: p.price * line.quantity });
         }
         const order = {
@@ -143,6 +146,13 @@ createServer(async (req, res) => {
       db.tenant = { id: 1, name: input.name, cutoff: `${input.cutoff.slice(0, 5)}:00`, deliveryDays: input.deliveryDays };
       return send(res, 201, db.tenant);
     }
+    if (path === "/settings/preview") {
+      const cutoff = url.searchParams.get("cutoff") ?? "";
+      if (!/^\d{2}:\d{2}/.test(cutoff)) return field(res, "cutoff", "Enter a time such as 16:00");
+      const days = url.searchParams.getAll("deliveryDays").map(Number);
+      if (!days.length) return field(res, "deliveryDays", "Choose at least one delivery day");
+      return send(res, 200, { deliveryDate: deliveryDate(days), timeZone: "Asia/Manila" });
+    }
     if (!db.tenant) return problem(res, 404, "Not found");
     if (path === "/settings") {
       if (req.method === "PUT") {
@@ -170,7 +180,7 @@ createServer(async (req, res) => {
       if (req.method === "POST") {
         const input = await body(req);
         const digits = input.mobile.replace(/[\s-]/g, "").replace(/^\+?63|^0/, "");
-        if (!/^9\d{9}$/.test(digits)) return problem(res, 422, "Invalid input");
+        if (!/^9\d{9}$/.test(digits)) return field(res, "mobile", "Enter a Philippine mobile number");
         const mobile = `+63${digits}`;
         if (db.resellers.some((r) => r.mobile === mobile)) return problem(res, 409, "A record with those details already exists");
         const t = token();

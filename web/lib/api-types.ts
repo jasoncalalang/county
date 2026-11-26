@@ -47,16 +47,25 @@ export interface ResellerView {
   lastOrderAt: string | null;
 }
 
+export interface OrderItemView {
+  productName: string;
+  unit: Unit;
+  quantity: number;
+}
+
 export interface OrderSummaryView {
   id: number;
   number: number;
   resellerId: number;
+  resellerName: string;
   placedAt: string;
   deliveryDate: string;
   status: Status;
   total: number;
   paid: boolean;
   note: string | null;
+  /** Lines in the order they were entered. */
+  items: OrderItemView[];
 }
 
 export interface OrderLineView {
@@ -68,7 +77,7 @@ export interface OrderLineView {
   total: number;
 }
 
-export interface OrderView extends OrderSummaryView {
+export interface OrderView extends Omit<OrderSummaryView, "items"> {
   confirmedAt: string | null;
   deliveredAt: string | null;
   cancelledAt: string | null;
@@ -113,7 +122,16 @@ export interface ProductionRunView {
   unconfirmedCount: number;
 }
 
-/** application/problem+json from the API. `errors` maps field paths to messages on a 422. */
+export interface SettingsPreviewView {
+  /** Delivery date of an order placed now with these settings. */
+  deliveryDate: string;
+  timeZone: string;
+}
+
+/**
+ * application/problem+json from the API. `errors` maps a field's JSON path (`price`,
+ * `lines[0].quantity`) to a message; it is empty when no single field is at fault.
+ */
 export interface Problem {
   status: number;
   title?: string;

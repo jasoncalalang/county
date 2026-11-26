@@ -694,3 +694,14 @@ button:disabled {
   background: var(--danger);
   border-color: var(--danger);
 }
+
+/* Items truncate to one line; the detail has the full list (UI design 6.3). */
+.items {
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cards .items {
+  max-width: none;
+}

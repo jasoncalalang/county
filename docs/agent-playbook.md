@@ -38,12 +38,12 @@ violate "tests first".
 
 ```bash
 # 1. toolchain
-java -version                 # must be 21
-node --version                # web only
+java -version                     # must be 21
+node --version && npm --version   # web only: Node >= 20.9 AND npm are both required
 
-# 2. database — a cloud session has Postgres 16 installed but NOT running
-pg_ctlcluster 16 main start   # or: sudo systemctl start postgresql
-pg_isready                    # expect: accepting connections
+# 2. database — pick the branch that matches the host
+pg_ctlcluster 16 main start       # cloud session: installed but NOT running
+pg_isready                        # expect: accepting connections
 
 # 3. api baseline
 cd api && COUNTY_TEST_SCHEMA=county_test_$(date +%s) ./gradlew build
@@ -52,11 +52,30 @@ cd api && COUNTY_TEST_SCHEMA=county_test_$(date +%s) ./gradlew build
 cd ../web && npm ci && npm run lint && npm test && npm run build
 ```
 
+**If the host has no system PostgreSQL** (`pg_ctlcluster` / `pg_isready` not found — common on a plain VM),
+run the same image CI uses and point the suite at it:
+
+```bash
+docker run -d --name county-pg -p 5432:5432 \
+  -e POSTGRES_USER=county -e POSTGRES_PASSWORD=test-only -e POSTGRES_DB=county_test \
+  postgres:17-alpine
+
+export COUNTY_TEST_JDBC_URL=jdbc:postgresql://localhost:5432/county_test
+export COUNTY_TEST_DB_USER=county
+export COUNTY_TEST_DB_PASSWORD=test-only
+cd api && COUNTY_TEST_SCHEMA=county_test_$(date +%s) ./gradlew build
+```
+
+Do not install or upgrade the JDK or Node to make a host fit. If the toolchain is wrong, report it and stop;
+a local install silently diverges from CI.
+
 Expected: `BUILD SUCCESSFUL` with the whole backend suite green, and `.next/standalone` written by the web
 build. If `./gradlew` is not executable, `chmod +x api/gradlew` — do not substitute a system Gradle.
 
 - **Postgres 16 here, 17 in CI.** Both must pass. Do not use syntax that only exists in 17; if you believe you
   need it, say so in the PR and expect the cloud session to fail.
+- **`node` present is not enough.** Next 16 declares `engines.node >= 20.9.0` and `npm ci` is the only
+  supported install; a host with an older Node or without npm cannot run the web checks.
 - **Playwright browsers** are preinstalled only in the cloud session. On another Linux box run
   `cd web && npx playwright install chromium` once before `npm run e2e`.
 - **Test schemas accumulate.** Every run needs a new `COUNTY_TEST_SCHEMA`; drop your own afterwards.

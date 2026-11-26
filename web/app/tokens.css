@@ -1,0 +1,26 @@
+/* county design tokens: interface design, section 3. The only stylesheet both interfaces share.
+   lib/order-page/styles.ts repeats these values; tokens.test.ts keeps the two in step. */
+:root {
+  --ink: #1c1917;
+  --ink-muted: #57534e;
+  --surface: #ffffff;
+  --surface-page: #f5f2ee;
+  --border: #d6d0c8;
+  --accent: #176b3a;
+  --accent-strong: #125530;
+  --danger: #b42318;
+  --danger-ground: #fee4e2;
+  --placed-ink: #7c4a03;
+  --placed-ground: #fef3c7;
+  --confirmed-ink: #1e3a8a;
+  --confirmed-ground: #dbeafe;
+  --delivered-ink: #14532d;
+  --delivered-ground: #dcfce7;
+  --cancelled-ink: #57534e;
+  --cancelled-ground: #e7e5e4;
+
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --radius-control: 6px;
+  --radius-card: 10px;
+  --tap: 44px;
+}

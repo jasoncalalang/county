@@ -136,8 +136,8 @@ class QuoteApiTest {
             .body("resellerName", is("Rosa"))
             .body("total", is(1350.0f))
             .body("note", is("Holiday price"))
-            .body("lines.productName", contains("Longganisa", "Hamonado"))
-            .body("lines.price", contains(50.0f, 120.0f))
+            .body("lines.productName", contains("Hamonado", "Longganisa"))
+            .body("lines.price", contains(120.0f, 50.0f))
             .body("sentAt", nullValue())
             .extract()
             .jsonPath();
@@ -171,7 +171,7 @@ class QuoteApiTest {
         .then()
         .statusCode(200)
         .body("total", is(1350.0f))
-        .body("lines.quantity", contains(3, 10));
+        .body("lines.quantity", contains(10, 3));
 
     String catalogDate =
         given().basePath("").get("/api/order/" + s.token()).then().extract().path("deliveryDate");
@@ -183,8 +183,8 @@ class QuoteApiTest {
             .body("status", is("placed"))
             .body("total", is(1350.0f))
             .body("deliveryDate", is(catalogDate))
-            .body("lines.productName", contains("Longganisa", "Hamonado"))
-            .body("lines.price", contains(50.0f, 120.0f))
+            .body("lines.productName", contains("Hamonado", "Longganisa"))
+            .body("lines.price", contains(120.0f, 50.0f))
             .extract()
             .jsonPath();
     long orderId = order.getLong("id");

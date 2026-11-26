@@ -91,7 +91,7 @@ class QuoteConcurrencyTest {
           "UPDATE quote SET status='cancelled', cancelled_at=now() WHERE id=?",
           quote);
       var result = pool.submit(accept(t.token(), quote));
-      awaitWait("%from quote %for update%");
+      awaitWait("%from quote %for %update%");
       assertFalse(result.isDone(), "accept must wait for the in-flight cancel");
       c.commit();
       var response = result.get(30, TimeUnit.SECONDS);

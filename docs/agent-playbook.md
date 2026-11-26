@@ -134,10 +134,10 @@ provided `COUNTY_TEST_JDBC_URL`. Never point tests at production credentials.
 
 | ID | Item | Priority | Status | Blocked by |
 |---|---|---|---|---|
-| W1 | Widen quantities + introduce units | P0 | not started | decision D2 |
-| W2 | Harden the public order surface | P0 | not started | decision D3 |
+| W1 | Widen quantities + introduce units | P0 | not started | — (D2: ADR 0017) |
+| W2 | Harden the public order surface | P0 | not started | — (D3: ADR 0018) |
 | W3 | `order_event` (actor-level history) | P0 | not started | — |
-| W4 | Rename `purchase_order` → `sales_order` | P0 | not started | decision D1 |
+| W4 | Rename `purchase_order` → `sales_order` | P0 | not started | — (D1: ADR 0016) |
 | W5 | Web UI (owner screens + reseller page) | P0 | not started | W3 (order detail history) |
 | W6 | Pagination on orders/products/resellers | P1 | not started | — |
 | W7 | Minimal stock (`stock_on_hand`) | P1 | not started | W1 |
@@ -164,7 +164,7 @@ plan, not in this queue.
 Each item lists **what to change**, **which tests to write first**, and **when it is done**. Use the exact
 file names so parallel agents do not collide.
 
-### W1 — Widen quantities and introduce units  *(P0, decision D2 first)*
+### W1 — Widen quantities and introduce units  *(P0, D2 decided: ADR 0017)*
 
 **Why.** `order_line.quantity INTEGER CHECK (1..9999)` plus `product.unit IN ('pack','kg','pc')` cannot
 express `1.5 kg`. A wholesaler of rice, meat or produce takes fractional orders. Itemcount models a
@@ -198,7 +198,7 @@ express `1.5 kg`. A wholesaler of rice, meat or produce takes fractional orders.
 
 **Do not** change `order_line.price` or `total` scale, and do not make `quantity` nullable.
 
-### W2 — Harden the public order surface  *(P0, decision D3 first)*
+### W2 — Harden the public order surface  *(P0, D3 decided: ADR 0018)*
 
 **Why.** `POST /api/order/{token}/orders` is the only unauthenticated write. There is no rate limiting
 anywhere, tokens never expire, and nothing caps junk orders. Itemcount's comparable surfaces ship a
@@ -206,7 +206,7 @@ reCAPTCHA site key and expiring invitation ids (`/partners/invitations/[invitati
 
 **Schema** — `V<next>__reseller_token_lifecycle.sql`
 - `reseller.token_expires_at TIMESTAMPTZ` (nullable; `NULL` = never expires, for backfill).
-- Backfill: `UPDATE reseller SET token_expires_at = now() + interval '90 days'` only if **D3** says so.
+- Backfill: `UPDATE reseller SET token_expires_at = now() + interval '90 days'` (ADR 0018).
 
 **API / code**
 - New `api/RateLimits.java` as a `ContainerRequestFilter` bound to the reseller path, keyed by
@@ -258,7 +258,7 @@ in the response.
 
 **Done when** `order_detail` can render history from the API alone, with actor names.
 
-### W4 — Rename `purchase_order` → `sales_order`  *(P0, decision D1 first)*
+### W4 — Rename `purchase_order` → `sales_order`  *(P0, D1 decided: ADR 0016)*
 
 **Why.** county's `purchase_order` is the reseller's order **to** the wholesaler — Itemcount's `SalesOrder`.
 In accounting, a purchase order is what the business buys from a supplier (Itemcount: `PurchaseOrder`,
@@ -360,15 +360,15 @@ Resellers on a deactivated tier keep its prices until reassigned (owner decision
 
 ## 5. Decision register (a human must answer before the item starts)
 
-| ID | Decision | Why it blocks | Suggested default |
+| ID | Decision | Answer (Jason, 2026-11-26) | Record |
 |---|---|---|---|
-| D1 | Rename `purchase_order` to `sales_order`? | It is a schema rename plus Java naming; conflicts possible with `county-architecture` naming | Rename now, one migration, no data change |
-| D2 | Rounding rule when quantity has three decimals | `Money.line` currently refuses rounding; fractions force a rule per line | `HALF_UP` per line, total = sum of rounded lines, recorded in an ADR; test `0.333 kg` |
-| D3 | Reseller link lifetime | Today tokens never expire | 90 days, reissue extends; expired behaves exactly like blocked |
-| D4 | BIR/receipts stance | If county ever records money as more than a flag, PH receipt rules apply | Record "no receipts in v1; `tin`/series/`isVatExempt` deferred" in the architecture repo |
+| D1 | Rename `purchase_order` to `sales_order`? | Yes: one migration, no data change, Java names follow in the same PR | ADR 0016 |
+| D2 | Rounding rule when quantity has three decimals | `HALF_UP` to centavos per line; order total = sum of rounded lines | ADR 0017 |
+| D3 | Reseller link lifetime | 90 days; reissue gives a new token and a new 90 days; expired behaves exactly like blocked | ADR 0018 |
+| D4 | BIR/receipts stance | No receipts, TIN, series or VAT flag while payment is a flag | ADR 0019 |
 
-Resolve D1–D4 by writing the answer into the architecture repository (or an ADR), then update this table.
-Do not implement against a guessed answer.
+ADRs are in `county-architecture/adr/`. A new decision goes in this table with "open" in the Answer column
+until a human answers it. Do not implement against a guessed answer.
 
 ---
 

@@ -21,11 +21,48 @@ that respects this repository's own rules.
 5. Nothing here is authorization to deploy. `AGENTS.md`: "Do not merge or deploy without explicit
    authorization."
 
-**Reference material (read-only):** `../itemcount-rea/` holds the reverse-engineered Itemcount client —
-`REPORT.md` (architecture, routes, API surface), `analysis/api-surface.md`, `analysis/graphql/viewer-fields.md`,
-`analysis/routes.txt`, `analysis/rest-paths.json`, `analysis/graphql/observed-schema.md`.
-Itemcount is evidence of **product shape**, never a specification, and never a mandate to copy code.
-Itemcount was analysed statically without credentials; treat its server behaviour as unknown.
+**Where the Itemcount evidence lives.** The analysis is **not part of this repository**. It sits beside the
+author's checkout in `../itemcount-rea/` (`REPORT.md`, `analysis/api-surface.md`,
+`analysis/graphql/viewer-fields.md`, `analysis/routes.txt`, `analysis/rest-paths.json`). On a fresh clone that
+folder will not exist — that is expected, not a setup failure. **Appendix A carries every Itemcount fact the
+work items rely on**, so no item is blocked by a missing folder: if you have it, read `REPORT.md` for context;
+if you do not, the work items are still complete as written.
+
+Itemcount is evidence of **product shape**, never a specification, and never a mandate to copy code. It was
+analysed statically without credentials, so any statement about its *server* behaviour is unknown.
+
+### 0.1 First hour on a fresh machine (Linux, cloud session or CI-like box)
+
+Prove the baseline is green before changing anything. An agent that cannot run the tests will silently
+violate "tests first".
+
+```bash
+# 1. toolchain
+java -version                 # must be 21
+node --version                # web only
+
+# 2. database — a cloud session has Postgres 16 installed but NOT running
+pg_ctlcluster 16 main start   # or: sudo systemctl start postgresql
+pg_isready                    # expect: accepting connections
+
+# 3. api baseline
+cd api && COUNTY_TEST_SCHEMA=county_test_$(date +%s) ./gradlew build
+
+# 4. web baseline (independent of the database)
+cd ../web && npm ci && npm run lint && npm test && npm run build
+```
+
+Expected: `BUILD SUCCESSFUL` with the whole backend suite green, and `.next/standalone` written by the web
+build. If `./gradlew` is not executable, `chmod +x api/gradlew` — do not substitute a system Gradle.
+
+- **Postgres 16 here, 17 in CI.** Both must pass. Do not use syntax that only exists in 17; if you believe you
+  need it, say so in the PR and expect the cloud session to fail.
+- **Playwright browsers** are preinstalled only in the cloud session. On another Linux box run
+  `cd web && npx playwright install chromium` once before `npm run e2e`.
+- **Test schemas accumulate.** Every run needs a new `COUNTY_TEST_SCHEMA`; drop your own afterwards.
+- **CI checks appear only for `api/**` changes** (`.github/workflows/backend.yml`). A docs-only PR legitimately
+  shows no checks; an `api/**` PR must show the `Backend verification` job green. Never merge an API change on
+  "no checks reported".
 
 ---
 
@@ -331,3 +368,34 @@ Do not implement against a guessed answer.
 - **You are tempted to add `tenantId` to a request** → re-read §1; derive it from the subject/token instead.
 - **The change is bigger than one work item** → split it and update the board; a reviewer must be able to
   read the PR against exactly one item above.
+
+---
+
+## Appendix A — Itemcount facts the work items rely on
+
+Self-contained summary, so no work item depends on an external folder. These are static observations of the
+shipped client `app.itemcount.io`, captured 2026-11-25; they describe **product shape only**.
+
+| Fact | Value / shape | Used by |
+|---|---|---|
+| Product | Philippine multi-tenant inventory + POS + franchise ordering SaaS (warehouse, BIR-compliant receipts, HRIS, payments) | context |
+| Client | Next.js static export on Vercel, 132 routes, 13 MB of JS, GraphQL via Apollo | context |
+| API | single `viewer`-rooted GraphQL schema: **1 299 operations** (549 queries, 692 mutations, 58 subscriptions), **304 `viewer` root fields**, **74 named types / 1 126 selected fields**, 43 REST paths | W6, W10 |
+| Tenancy | tenant implied by the bearer token; no `accountId` argument in most operations | §1 rule |
+| Identity | Google OAuth, JWT in `localStorage`, roles `admin`/`mainAdmin`/`cashier`/`superadmin`/`employee`/`finance`, per-user permission matrix | W3, W5, §6 |
+| Measurement | `MeasurementUnit` entity with conversions; items carry separate cost and selling units (`costMeasurementUnitId`, `wacCostMeasurementUnitId`) | W1 |
+| Catalog | `Product → Variant → VariantOption`; per-channel prices (`priceApp`, `priceFoodpanda`, `priceLazada`); per-item pricing options and cascade pricing | W8, W10 |
+| Stock | per-location counts (`locationCountsArray`), reorder points, lots with expiry, transfers, rejects | W7 |
+| Orders | `SalesOrder` (out) vs `PurchaseOrder` (in), quotes, fulfilment orders, void requests, discrepancy reports | W4 |
+| Delivery | `deliveryDate` / `expectedShipDate` / `deliveryStatus`, restricted weekdays, frequency routes | W9 |
+| History | per-order status events separate from a platform audit trail (`/audit-trails/*`, `audit-logs` page) | W3 |
+| Receipts | 11 `/transaction-report/*` endpoints: X-reading, Z-reading, e-journal, BIR sales report, sales adjustment | D4 |
+| Scale habits | typed pagination inputs on essentially every list (`CommonPaginationInput`, `ItemPaginationInput`, …) | W6 |
+| Integrations | Lazada, TikTok Shop, Xero, QuickBooks, MCP access keys — **out of scope for county** | not planned |
+
+Two rules that follow from the table and are easy to get wrong:
+
+1. Itemcount's `PurchaseOrder` is the **buying** side; county's current `purchase_order` is the **selling**
+   side, which is Itemcount's `SalesOrder` (decision D1).
+2. Itemcount evaluates entitlements client-side (`viewer.isAllowedToCancelTransaction`, `showCostColumn`) —
+   county must keep enforcement server-side (§6).

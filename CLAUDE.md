@@ -2,7 +2,9 @@
 
 Monorepo: `api/` (Quarkus, Java 21, Gradle) and `web/` (Next.js, App Router,
 TypeScript). Read `AGENTS.md` first. Specs are in `docs/superpowers/specs/`;
-decision records are in the `county-architecture` repository.
+decision records are in the `county-architecture` repository. The ordered work
+queue, its decision register and the fresh-machine bootstrap are in
+`docs/agent-playbook.md`.
 
 ## Checks
 

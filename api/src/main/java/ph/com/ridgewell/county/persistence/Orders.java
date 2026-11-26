@@ -20,7 +20,7 @@ import ph.com.ridgewell.county.domain.*;
  */
 @ApplicationScoped
 public class Orders {
-  private static final ZoneId ZONE = ZoneId.of("Asia/Manila");
+  static final ZoneId ZONE = ZoneId.of("Asia/Manila");
   private static final BigDecimal MAXIMUM = new BigDecimal("9999999999.99");
 
   public record Placement(boolean replay, Views.Order order) {}
@@ -31,9 +31,22 @@ public class Orders {
   }
 
   private static LocalDate delivery(Business business) {
+    return delivery(business.cutoff, business.deliveryDays);
+  }
+
+  /** The delivery date of an order placed now, in the business timezone. */
+  static LocalDate delivery(LocalTime cutoff, Integer[] deliveryDays) {
     Set<DayOfWeek> weekdays = new HashSet<>();
-    for (Integer d : business.deliveryDays) weekdays.add(DayOfWeek.of(d));
-    return DeliveryDates.compute(Instant.now(), ZONE, business.cutoff, weekdays);
+    for (Integer d : deliveryDays) weekdays.add(DayOfWeek.of(d));
+    return DeliveryDates.compute(Instant.now(), ZONE, cutoff, weekdays);
+  }
+
+  private static LocalDate date(String value) {
+    try {
+      return LocalDate.parse(value);
+    } catch (DateTimeException | NullPointerException e) {
+      throw Problem.field("date", "Enter a date such as 2026-11-05");
+    }
   }
 
   /** Per-product tier prices for a reseller, empty when the reseller has no tier. */
@@ -108,18 +121,23 @@ public class Orders {
         throw new Problem(409, "Idempotency key already used");
       return new Placement(true, view(existing.get()));
     }
-    Set<Long> seen = new HashSet<>();
+    var submitted = input.lines();
+    // A field error names the line as submitted; a repeated product names its later line.
+    Map<Long, Integer> firstIndex = new HashMap<>();
+    for (int i = 0; i < submitted.size(); i++)
+      if (firstIndex.putIfAbsent(submitted.get(i).productId(), i) != null)
+        throw Problem.field(
+            "lines[" + i + "].productId", "This product is already on another line");
     List<OrderLine> lines = new ArrayList<>();
     BigDecimal total = new BigDecimal("0.00");
     // Ascending product ids: a stable lock order avoids deadlocks with product edits.
-    for (var line :
-        input.lines().stream().sorted(Comparator.comparing(Inputs.Line::productId)).toList()) {
-      if (!seen.add(line.productId()))
-        throw new Problem(422, "Duplicate product lines are not allowed");
+    for (var line : submitted.stream().sorted(Comparator.comparing(Inputs.Line::productId)).toList()) {
+      String field = "lines[" + firstIndex.get(line.productId()) + "]";
       var product =
           Product.inTenant(reseller.tenantId, line.productId(), PESSIMISTIC_READ)
               .orElseThrow(() -> new Problem(404, "Not found"));
-      if (!product.active) throw new Problem(422, product.name + " is no longer available");
+      if (!product.active)
+        throw Problem.field(field + ".productId", product.name + " is no longer available");
       // The reseller's tier price if set, else the product's base price. Captured here and
       // immutable thereafter (ADR 0012). The product's read lock guards the tier price read.
       BigDecimal unitPrice =
@@ -130,7 +148,7 @@ public class Orders {
                   .orElse(product.price);
       var lineTotal = Money.line(unitPrice, line.quantity());
       total = total.add(lineTotal);
-      if (total.compareTo(MAXIMUM) > 0) throw new Problem(422, "Order total is too large");
+      if (total.compareTo(MAXIMUM) > 0) throw Problem.field("lines", "Order total is too large");
       var saved = new OrderLine();
       saved.tenantId = reseller.tenantId;
       saved.productId = product.id;
@@ -173,33 +191,56 @@ public class Orders {
     params.put("tenant", Owners.tenant(subject).id);
     if (date != null) {
       query.append(" and deliveryDate = :date");
-      params.put("date", LocalDate.parse(date));
+      params.put("date", date(date));
     }
     if (status != null) {
       query.append(" and status = :status");
       params.put("status", statusValue(status).name().toLowerCase(Locale.ROOT));
     }
-    return PurchaseOrder.<PurchaseOrder>list(query.toString(), Sort.by("number"), params).stream()
+    long tenant = (Long) params.get("tenant");
+    List<PurchaseOrder> found =
+        PurchaseOrder.<PurchaseOrder>list(query.toString(), Sort.by("number"), params);
+    if (found.isEmpty()) return List.of();
+    List<Long> ids = found.stream().map(o -> o.id).toList();
+    Map<Long, List<Views.OrderItem>> items = new HashMap<>();
+    for (OrderLine l :
+        OrderLine.<OrderLine>list(
+            "tenantId = ?1 and orderId in ?2", Sort.by("orderId").and("id"), tenant, ids))
+      items
+          .computeIfAbsent(l.orderId, k -> new ArrayList<>())
+          .add(new Views.OrderItem(l.productName, l.unit, l.quantity));
+    Map<Long, String> names = resellerNames(tenant, found.stream().map(o -> o.resellerId).toList());
+    return found.stream()
         .map(
             o ->
                 new Views.OrderSummary(
                     o.id,
                     o.number,
                     o.resellerId,
+                    names.get(o.resellerId),
                     Times.instant(o.placedAt),
                     o.deliveryDate.toString(),
                     o.status,
                     o.total,
                     o.paid,
-                    o.note))
+                    o.note,
+                    items.getOrDefault(o.id, List.of())))
         .toList();
+  }
+
+  private static Map<Long, String> resellerNames(long tenant, Collection<Long> ids) {
+    Map<Long, String> names = new HashMap<>();
+    for (Reseller r :
+        Reseller.<Reseller>list("tenantId = ?1 and id in ?2", tenant, new HashSet<>(ids)))
+      names.put(r.id, r.name);
+    return names;
   }
 
   private static OrderRules.Status statusValue(String value) {
     try {
       return OrderRules.Status.valueOf(value.toUpperCase(Locale.ROOT));
     } catch (IllegalArgumentException e) {
-      throw new Problem(422, "Unknown status");
+      throw Problem.field("status", "Use placed, confirmed, delivered or cancelled");
     }
   }
 
@@ -248,9 +289,8 @@ public class Orders {
 
   @Transactional
   public Views.ProductionRun production(String subject, String date) {
-    if (date == null) throw new Problem(422, "Delivery date is required");
+    LocalDate delivery = date(date);
     long tenant = Owners.tenant(subject).id;
-    LocalDate delivery = LocalDate.parse(date);
     var lines =
         OrderLine.getEntityManager()
             .createQuery(
@@ -295,6 +335,7 @@ public class Orders {
     return new Views.Order(
         o.id,
         o.resellerId,
+        resellerNames(o.tenantId, List.of(o.resellerId)).get(o.resellerId),
         o.number,
         Times.instant(o.placedAt),
         o.deliveryDate.toString(),

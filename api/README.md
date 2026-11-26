@@ -46,7 +46,8 @@ under `build/openapi` during build; the versioned contract is `contract/openapi.
 `./gradlew verifyOpenApi` checks drift and runs as part of `check`/`build`. After an
 intentional API change, run `./gradlew updateOpenApi`, inspect and commit its diff.
 
-Owner: `/me`, `POST /tenants`, `GET/PUT /settings`, `GET/POST /products`,
+Owner: `/me`, `POST /tenants`, `GET/PUT /settings`,
+`GET /settings/preview?cutoff=HH:mm&deliveryDays=1&deliveryDays=4`, `GET/POST /products`,
 `PUT /products/{id}`, `GET/POST /resellers`, `PUT /resellers/{id}`,
 `POST /resellers/{id}/{block|unblock|reissue-link}`, `GET /orders?date=&status=`,
 `GET /orders/{id}`, `POST /orders/{id}/{confirm|cancel|deliver|mark-paid}`,
@@ -62,7 +63,18 @@ Public reseller: `GET /order/{token}`, `POST /order/{token}/orders`,
 `GET /order/{token}/orders/{id}`, `POST /order/{token}/orders/{id}/cancel`.
 
 Date filters are delivery dates. Money is decimal PHP, quantity whole units. Status
-strings are lowercase. Mutation payload shapes are in `Inputs.java` and OpenAPI.
+strings are lowercase. The order list includes each order's `resellerName` and its
+`items` (product name, unit, quantity) so a dashboard row needs no further calls;
+order detail includes `resellerName` too. The settings preview takes unsaved values,
+needs a signed-in owner but no business, and returns the delivery date an order placed
+now would get.
+
+Every error is `application/problem+json` with `type`, `title`, `status`, `detail` and
+`errors`, a map from a field's JSON path (`price`, `lines[0].quantity`) to a message;
+it is empty when no single field is at fault. A body that is not a JSON object is 400.
+A field of the wrong JSON type and a failed validation are both 422, keyed the same
+way. A missing body is reported as `body`; query parameters by their name. The 401
+from Google token verification comes from Quarkus OIDC and has no body. Mutation payload shapes are in `Inputs.java` and OpenAPI.
 Do not log bearer tokens/order links. API responses are `no-store` with no referrers.
 
 ## Implementation notes / limits
@@ -88,16 +100,17 @@ Do not log bearer tokens/order links. API responses are `no-store` with no refer
   user idempotently. Profile fields come only from verified token claims; email is
   never an account-linking key. V2 backfills V1 owners without changing business IDs.
 - Public HTTP responses use explicit typed DTOs rather than exposing database maps.
-- No web UI, real Google browser acceptance, production deployment, rate limiting,
-  or operational backup validation is included.
+- No web UI, real Google browser acceptance, production deployment or operational
+  backup validation is included.
+- Rate limiting is not in the API. The deployment spec (sections 5 and 11) puts it at
+  the edge: a Cloudflare rule on `/api/order/*`, for example 60 requests a minute per
+  IP. Token probing is already blind, since unknown and blocked tokens are both 404.
 - Local defaults are development credentials only. Set explicit real credentials and
   Google audience before any production use; deployment is a separate authorized task.
 
 ### Explicit next backend work
 
 This is a draft foundation, not a complete v1 backend certification:
-- Add settings preview metadata, order-list product/reseller display summaries and
-  consistent API field-error shapes for all JSON decoding failures.
 - Extend concurrency coverage when adding new workflows. Existing tests cover
   same-key replays, distinct-key numbering, and product edit/deactivation interleavings.
 

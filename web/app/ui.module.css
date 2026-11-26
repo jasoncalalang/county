@@ -1,0 +1,707 @@
+/* Dashboard components (UI design, section 4). Values come from app/tokens.css. */
+
+/* App bar and navigation */
+.appBar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.appBarInner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 16px;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.business {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+.navLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 56px;
+  padding: 0 10px;
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.navLink[aria-current="page"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.count {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--placed-ink);
+  background: var(--placed-ground);
+  border-radius: 6px;
+  padding: 0 6px;
+}
+@media (max-width: 899px) {
+  .appBarInner {
+    flex-wrap: wrap;
+    gap: 0;
+  }
+  .business {
+    flex: 1;
+  }
+  .nav {
+    order: 3;
+    flex-basis: 100%;
+    overflow-x: auto;
+    margin: 0 -16px;
+    padding: 0 6px;
+    border-top: 1px solid var(--border);
+  }
+  .navLink {
+    min-height: 44px;
+  }
+}
+
+/* Page frame */
+.main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px 16px 48px;
+}
+@media (min-width: 900px) {
+  .main {
+    padding: 24px 24px 48px;
+  }
+}
+.narrow {
+  max-width: 480px;
+  margin: 0 auto;
+}
+.title {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
+  margin: 0 0 16px;
+}
+@media (min-width: 900px) {
+  .title {
+    font-size: 28px;
+    line-height: 36px;
+  }
+}
+.heading {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+  margin: 0;
+}
+.pageHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.pageHeader .title {
+  margin: 0;
+}
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.small {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-muted);
+}
+.label {
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.num {
+  font-variant-numeric: tabular-nums;
+}
+.muted {
+  color: var(--ink-muted);
+}
+.dangerText {
+  color: var(--danger);
+}
+.warnText {
+  color: var(--placed-ink);
+}
+
+/* Buttons */
+.primary,
+.secondary,
+.textButton,
+.dangerButton {
+  min-height: 44px;
+  padding: 0 16px;
+  font: inherit;
+  font-weight: 600;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+.primary {
+  color: #fff;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+}
+.primary:hover,
+.primary:active {
+  background: var(--accent-strong);
+}
+.secondary {
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.textButton {
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0 8px;
+}
+.dangerButton {
+  color: var(--danger);
+  background: none;
+  border: 0;
+  padding: 0 8px;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.wide {
+  width: 100%;
+}
+
+/* Cards, dialogs, forms */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 16px;
+}
+.centered {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.signIn {
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+  display: grid;
+  gap: 16px;
+  padding: 32px 24px;
+}
+.brand {
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 600;
+  margin: 0;
+}
+.dialog {
+  width: min(400px, calc(100vw - 32px));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 24px;
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgb(28 25 23 / 0.2);
+}
+.dialog::backdrop {
+  background: rgb(28 25 23 / 0.4);
+}
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 24px;
+}
+.field {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.field input,
+.field select {
+  min-height: 44px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 0 12px;
+}
+.field input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.fieldError {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--danger);
+}
+.days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+  margin: 0 0 16px;
+}
+.days legend {
+  margin-bottom: 4px;
+  padding: 0;
+}
+.day {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+.prefix {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  padding-left: 12px;
+}
+.prefix input {
+  border: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Date picker and chips */
+.datePicker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.arrow {
+  min-width: 44px;
+  min-height: 44px;
+  font: inherit;
+  font-size: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  color: var(--ink);
+}
+.dateLabel {
+  min-width: 150px;
+  text-align: center;
+  font-weight: 600;
+}
+.dateInput {
+  min-height: 44px;
+  font: inherit;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 0 8px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin-bottom: 12px;
+  padding: 2px;
+}
+.chip {
+  min-height: 44px;
+  padding: 0 14px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chip[aria-pressed="true"] {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.summary {
+  margin: 0 0 12px;
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 8px;
+  border-radius: var(--radius-control);
+  white-space: nowrap;
+}
+.placed {
+  color: var(--placed-ink);
+  background: var(--placed-ground);
+}
+.confirmed {
+  color: var(--confirmed-ink);
+  background: var(--confirmed-ground);
+}
+.delivered,
+.active,
+.paid {
+  color: var(--delivered-ink);
+  background: var(--delivered-ground);
+}
+.cancelled,
+.invited,
+.unpaid {
+  color: var(--cancelled-ink);
+  background: var(--cancelled-ground);
+}
+.blocked {
+  color: var(--danger);
+  background: var(--danger-ground);
+}
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/* Tables, and cards below 900 px (UI design, section 9) */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+.table th {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+.table td {
+  padding: 6px 12px;
+  height: 56px;
+  border-bottom: 1px solid var(--border);
+}
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.table tfoot td {
+  font-weight: 600;
+  border-top: 1px solid var(--border);
+}
+.right {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.cards {
+  display: none;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cards > li {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  display: grid;
+  gap: 6px;
+}
+.cardLine {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 899px) {
+  .tableWrap {
+    display: none;
+  }
+  .cards {
+    display: block;
+  }
+}
+.inactiveRow td:first-child,
+.inactiveName {
+  color: var(--ink-muted);
+}
+.cellButton {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 8px 0;
+  min-height: 44px;
+  cursor: text;
+  text-align: inherit;
+}
+.inlineEdit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.inlineEdit input,
+.inlineEdit select {
+  min-height: 44px;
+  font: inherit;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 0 8px;
+  max-width: 220px;
+}
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.toggle input {
+  appearance: none;
+  width: 40px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--border);
+  position: relative;
+  cursor: pointer;
+  margin: 0;
+}
+.toggle input::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--surface);
+  transition: left 0.15s;
+}
+.toggle input:checked {
+  background: var(--accent);
+}
+.toggle input:checked::after {
+  left: 19px;
+}
+
+/* States */
+.empty {
+  text-align: center;
+  padding: 48px 16px;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+.empty p {
+  margin: 0;
+}
+.placeholderRow {
+  height: 56px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-card);
+  background: var(--cancelled-ground);
+}
+.notice {
+  color: var(--placed-ink);
+  background: var(--placed-ground);
+  border-radius: var(--radius-control);
+  padding: 12px 16px;
+  margin-bottom: 12px;
+}
+.notice a {
+  color: inherit;
+}
+.freshness {
+  margin-top: 12px;
+}
+.toasts {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 8px;
+  z-index: 10;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+}
+.toast {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 12px 16px;
+  box-shadow: 0 6px 16px rgb(28 25 23 / 0.15);
+  animation: fade 0.2s;
+}
+.toastError {
+  color: var(--danger);
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Link reveal */
+.linkBox {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  word-break: break-all;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 12px;
+  margin: 12px 0;
+  background: var(--surface-page);
+}
+
+/* Order detail */
+.detail {
+  display: grid;
+  gap: 16px;
+}
+@media (min-width: 900px) {
+  .detail {
+    grid-template-columns: 2fr 1fr;
+    align-items: start;
+  }
+}
+.back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+.quote {
+  margin: 16px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--border);
+}
+.facts {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+.facts dt {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+.facts dd {
+  margin: 0;
+}
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Print: the production run goes to the kitchen on A4 (UI design 6.5) */
+.printHeader {
+  display: none;
+}
+@media print {
+  .appBar,
+  .noPrint,
+  .toasts {
+    display: none !important;
+  }
+  .printHeader {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .main {
+    padding: 0;
+    max-width: none;
+  }
+  .table {
+    font-size: 12pt;
+    border: 0;
+  }
+  .tableWrap {
+    display: block !important;
+  }
+  .cards {
+    display: none !important;
+  }
+}
+@page {
+  size: A4 portrait;
+  margin: 15mm;
+}
+
+.dangerPrimary,
+.dangerPrimary:hover,
+.dangerPrimary:active {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+/* Items truncate to one line; the detail has the full list (UI design 6.3). */
+.items {
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cards .items {
+  max-width: none;
+}

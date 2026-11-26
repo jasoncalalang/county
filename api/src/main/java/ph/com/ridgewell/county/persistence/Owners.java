@@ -96,8 +96,35 @@ public class Owners {
 
   private static void apply(Business business, Inputs.Business input) {
     business.name = input.name().trim();
-    business.cutoff = LocalTime.parse(input.cutoff());
+    business.cutoff = cutoff(input.cutoff());
     business.deliveryDays = input.deliveryDays().toArray(Integer[]::new);
+  }
+
+  /** A cut-off time such as {@code 16:00}, or a field error. */
+  static LocalTime cutoff(String value) {
+    try {
+      return LocalTime.parse(value);
+    } catch (java.time.DateTimeException | NullPointerException e) {
+      throw Problem.field("cutoff", "Enter a time such as 16:00");
+    }
+  }
+
+  /** What the settings page shows for unsaved values: no business is required. */
+  public static Views.SettingsPreview preview(String cutoff, List<String> deliveryDays) {
+    LocalTime time = cutoff(cutoff);
+    Set<Integer> days = new HashSet<>();
+    for (String day : deliveryDays == null ? List.<String>of() : deliveryDays) {
+      try {
+        int value = Integer.parseInt(day.trim());
+        if (value < 1 || value > 7) throw new NumberFormatException();
+        days.add(value);
+      } catch (NumberFormatException e) {
+        throw Problem.field("deliveryDays", "Use days 1 (Monday) to 7 (Sunday)");
+      }
+    }
+    if (days.isEmpty()) throw Problem.field("deliveryDays", "Choose at least one delivery day");
+    return new Views.SettingsPreview(
+        Orders.delivery(time, days.toArray(Integer[]::new)).toString(), Orders.ZONE.getId());
   }
 
   @Transactional
@@ -155,7 +182,12 @@ public class Owners {
   @Transactional
   public Views.Reseller reseller(String subject, Long id, Inputs.Reseller input) {
     long tenant = tenant(subject).id;
-    String mobile = PhilippineMobile.normalize(input.mobile());
+    String mobile;
+    try {
+      mobile = PhilippineMobile.normalize(input.mobile());
+    } catch (IllegalArgumentException e) {
+      throw Problem.field("mobile", e.getMessage());
+    }
     Reseller reseller;
     if (id == null) {
       reseller = new Reseller();
@@ -300,7 +332,7 @@ public class Owners {
       var tier =
           PriceTier.inTenant(tenant, input.priceTierId(), PESSIMISTIC_READ)
               .orElseThrow(() -> new Problem(404, "Not found"));
-      if (!tier.active) throw new Problem(422, "Price tier is not active");
+      if (!tier.active) throw Problem.field("priceTierId", "Price tier is not active");
       reseller.priceTierId = tier.id;
     }
     Reseller.flush();

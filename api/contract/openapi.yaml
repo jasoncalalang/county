@@ -110,6 +110,21 @@ components:
           anyOf:
           - $ref: "#/components/schemas/BusinessView"
           - type: "null"
+    OrderItemView:
+      description: "One line of an order, as the order list shows it"
+      type: object
+      properties:
+        productName:
+          type: string
+        unit:
+          type: string
+          enum:
+          - pack
+          - kg
+          - pc
+        quantity:
+          type: integer
+          format: int32
     OrderLineView:
       type: object
       properties:
@@ -139,6 +154,8 @@ components:
         resellerId:
           type: integer
           format: int64
+        resellerName:
+          type: string
         placedAt:
           type: string
           format: date-time
@@ -158,6 +175,11 @@ components:
           type: boolean
         note:
           type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItemView"
+          description: Lines in the order they were entered
     OrderView:
       type: object
       properties:
@@ -167,6 +189,8 @@ components:
         resellerId:
           type: integer
           format: int64
+        resellerName:
+          type: string
         number:
           type: integer
           format: int64
@@ -359,6 +383,16 @@ components:
           - string
           - "null"
           format: date-time
+    SettingsPreviewView:
+      type: object
+      properties:
+        deliveryDate:
+          type: string
+          description: Delivery date of an order placed now with these settings
+          format: date
+        timeZone:
+          type: string
+          description: IANA timezone the cut-off is compared in
     UUID:
       type: string
       format: uuid
@@ -907,6 +941,35 @@ paths:
         "403":
           description: Not Allowed
       summary: Settings
+      tags:
+      - Owner Resource
+      security:
+      - SecurityScheme: []
+  /api/settings/preview:
+    get:
+      parameters:
+      - name: cutoff
+        in: query
+        schema:
+          type: string
+      - name: deliveryDays
+        in: query
+        schema:
+          type: array
+          items:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingsPreviewView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Preview
       tags:
       - Owner Resource
       security:

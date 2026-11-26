@@ -124,10 +124,19 @@ provided `COUNTY_TEST_JDBC_URL`. Never point tests at production credentials.
 | W7 | Minimal stock (`stock_on_hand`) | P1 | not started | W1 |
 | W8 | Product variants | P1 | not started | W1, W7 |
 | W9 | Delivery calendar depth | P2 | not started | — |
-| W10 | Per-reseller pricing | P2 | not started | W8 |
+| W10 | Per-reseller pricing | P1 (ADR 0014) | in review: county #4 | ADR 0015, tier-retirement decision |
 
 `P0` = breaks the v1 promise or forces a data rewrite. `P1` = next slice. `P2` = explicit ceiling; do not
 start without a named customer.
+
+`V<next>` is the next free Flyway version on `main` when your PR is opened; check
+`api/src/main/resources/db/migration/` and renumber if another PR merged first. Never reuse or reorder a
+merged version.
+
+ADR 0014 in `county-architecture` (accepted 2026-11-26) lifts the v1 scope freeze for five Beyond-v1
+features in this order: price tiers, quotes, receive-with-discrepancy, MOQ + order windows, payment links.
+W10 is the first of them. The other four are specified in the architecture repository's Beyond-v1 build
+plan, not in this queue.
 
 ---
 
@@ -143,7 +152,7 @@ express `1.5 kg`. A wholesaler of rice, meat or produce takes fractional orders.
 `MeasurementUnit` with conversions and keeps cost/selling units separately (`viewer.items.costMeasurementUnitId`,
 `wacCostMeasurementUnitId`) — evidence that the unit is data, not an enum.
 
-**Schema** — new migration `api/src/main/resources/db/migration/V3__fractional_quantities.sql`
+**Schema** — new migration `api/src/main/resources/db/migration/V<next>__fractional_quantities.sql`
 - `order_line.quantity` → `NUMERIC(12,3)` with `CHECK (quantity > 0 AND quantity <= 9999)`.
 - `product.unit` stays a label for compatibility; add `measurement_unit(id, tenant_id, code, label)` seeded
   with `pack`, `kg`, `pc` per tenant, and `product.measurement_unit_id` nullable FK backfilled from `unit`.
@@ -176,7 +185,7 @@ express `1.5 kg`. A wholesaler of rice, meat or produce takes fractional orders.
 anywhere, tokens never expire, and nothing caps junk orders. Itemcount's comparable surfaces ship a
 reCAPTCHA site key and expiring invitation ids (`/partners/invitations/[invitationId]`).
 
-**Schema** — `V4__reseller_token_lifecycle.sql`
+**Schema** — `V<next>__reseller_token_lifecycle.sql`
 - `reseller.token_expires_at TIMESTAMPTZ` (nullable; `NULL` = never expires, for backfill).
 - Backfill: `UPDATE reseller SET token_expires_at = now() + interval '90 days'` only if **D3** says so.
 
@@ -207,7 +216,7 @@ and `api/README.md` documents the new settings and the single-instance caveat of
 `*_at` columns and no actor. `OrderRules.Actor` already exists and is discarded. Roles (P2) are unsafe
 without this.
 
-**Schema** — `V5__order_events.sql`
+**Schema** — `V<next>__order_events.sql`
 ```
 order_event(id, tenant_id, order_id, at TIMESTAMPTZ, actor_type TEXT CHECK IN ('owner','reseller'),
             actor_user_id BIGINT NULL, actor_reseller_id BIGINT NULL, from_status TEXT, to_status TEXT,
@@ -236,7 +245,7 @@ in the response.
 In accounting, a purchase order is what the business buys from a supplier (Itemcount: `PurchaseOrder`,
 `supplier`, `sourcing`). When county adds sourcing, the name will mean the opposite thing.
 
-**Schema** — `V6__rename_purchase_order.sql`
+**Schema** — `V<next>__rename_purchase_order.sql`
 `ALTER TABLE purchase_order RENAME TO sales_order;` plus renamed constraints/indexes
 (`sales_order_number_key`, `sales_order_delivery_idx`, `sales_order_reseller_recent_idx`) and the FK from
 `order_line`. Keep the Java entity name (`PurchaseOrder.java`) **or** rename it in the same PR — either is
@@ -321,11 +330,12 @@ Current rule is a weekday set plus one cut-off (`DeliveryDates.compute`). Real n
 per-reseller delivery day, per-day cut-off. Itemcount reference for shape only: `UpdateRestrictedDayOfWeek`,
 `UpdateFrequencyRoutes`, `deliveryStatus`. Do not start without a customer.
 
-### W10 — Per-reseller pricing  *(P2)*
+### W10 — Per-reseller pricing  *(P1, accepted by ADR 0014)*
 
-Deferred by spec §12. When it starts, `product.price` stops being the resolved price, so introduce a
-resolution function and freeze the resolved price on `order_line` (already snapshotted — keep it).
-Itemcount reference: `itemPricingOption`, cascade pricing, `RistrictedPrice`.
+Was deferred by spec §12; ADR 0014 lifts that. Built in county #4 (draft): `price_tier`,
+`product_tier_price` and `reseller.price_tier_id`, resolved per line at placement and frozen on `order_line`
+like the base price. It waits on ADR 0015 (the rule for added lock targets) and the owner's tier-retirement
+decision. Itemcount reference: `itemPricingOption`, cascade pricing, `RistrictedPrice`.
 
 ---
 

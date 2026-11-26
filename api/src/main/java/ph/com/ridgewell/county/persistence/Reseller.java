@@ -25,6 +25,10 @@ public class Reseller extends PanacheEntityBase {
   @Column(name = "has_ordered")
   public boolean hasOrdered;
 
+  /** The reseller's price tier, or null for the product's base price. */
+  @Column(name = "price_tier_id")
+  public Long priceTierId;
+
   public static Optional<Reseller> inTenant(long tenant, long id, LockModeType lock) {
     return find("tenantId = ?1 and id = ?2", tenant, id).withLock(lock).singleResultOptional();
   }

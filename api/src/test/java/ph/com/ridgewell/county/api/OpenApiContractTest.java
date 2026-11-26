@@ -75,7 +75,10 @@ class OpenApiContractTest {
           "OrderLineView",
           "CatalogView",
           "ProductionRunView",
-          "MeView"
+          "MeView",
+          "PriceTierView",
+          "TierPricesView",
+          "TierProductPriceView"
         }) assertNotNull(schemas.get(name), "Missing typed schema: " + name);
     Map<String, Object> orderProperties =
         contract.getMap("components.schemas.OrderView.properties");
@@ -92,7 +95,9 @@ class OpenApiContractTest {
           "/api/orders",
           "/api/orders/{id}",
           "/api/order/{token}",
-          "/api/production-run"
+          "/api/production-run",
+          "/api/price-tiers",
+          "/api/price-tiers/{id}/prices"
         }) {
       Map<String, Object> schema =
           contract.getMap(
@@ -112,5 +117,9 @@ class OpenApiContractTest {
         "#/components/schemas/ProductView",
         contract.getString(
             "paths.'/api/products'.post.responses.'201'.content.'application/json'.schema.'$ref'"));
+    assertEquals(
+        "#/components/schemas/PriceTierView",
+        contract.getString(
+            "paths.'/api/price-tiers'.post.responses.'201'.content.'application/json'.schema.'$ref'"));
   }
 }

@@ -1,10 +1,13 @@
 package ph.com.ridgewell.county.persistence;
 
+import static jakarta.persistence.LockModeType.NONE;
+import static jakarta.persistence.LockModeType.PESSIMISTIC_READ;
 import static jakarta.persistence.LockModeType.PESSIMISTIC_WRITE;
 
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
+import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.security.SecureRandom;
 import java.time.LocalTime;
@@ -233,7 +236,107 @@ public class Owners {
         r.status,
         r.token,
         publicUrl.replaceAll("/$", "") + "/order/" + r.token,
-        lastOrderAt == null ? null : Times.instant((java.time.Instant) lastOrderAt));
+        lastOrderAt == null ? null : Times.instant((java.time.Instant) lastOrderAt),
+        r.priceTierId);
+  }
+
+  @Transactional
+  public List<Views.PriceTier> priceTiers(String subject) {
+    return PriceTier.<PriceTier>list(
+            "tenantId", Sort.descending("active").and("id"), tenant(subject).id)
+        .stream()
+        .map(t -> new Views.PriceTier(t.id, t.name, t.active))
+        .toList();
+  }
+
+  @Transactional
+  public Views.PriceTier priceTier(String subject, Long id, Inputs.PriceTier input) {
+    long tenant = tenant(subject).id;
+    PriceTier tier;
+    if (id == null) {
+      tier = new PriceTier();
+      tier.tenantId = tenant;
+      tier.active = input.active() == null || input.active();
+    } else {
+      tier =
+          PriceTier.inTenant(tenant, id, PESSIMISTIC_WRITE)
+              .orElseThrow(() -> new Problem(404, "Not found"));
+      if (input.active() != null) tier.active = input.active();
+    }
+    tier.name = input.name().trim();
+    tier.persist();
+    PriceTier.flush();
+    return new Views.PriceTier(tier.id, tier.name, tier.active);
+  }
+
+  @Transactional
+  public Views.TierPrices tierPrices(String subject, long tierId) {
+    long tenant = tenant(subject).id;
+    var tier =
+        PriceTier.inTenant(tenant, tierId, NONE).orElseThrow(() -> new Problem(404, "Not found"));
+    Map<Long, BigDecimal> overrides = new HashMap<>();
+    for (ProductTierPrice p :
+        ProductTierPrice.<ProductTierPrice>list(
+            "tenantId = ?1 and priceTierId = ?2", tenant, tierId)) overrides.put(p.productId, p.price);
+    var products =
+        Product.<Product>list("tenantId", Sort.descending("active").and("id"), tenant).stream()
+            .map(
+                p ->
+                    new Views.TierProductPrice(
+                        p.id, p.name, p.unit, p.price, overrides.get(p.id)))
+            .toList();
+    return new Views.TierPrices(tier.id, tier.name, tier.active, products);
+  }
+
+  @Transactional
+  public Views.TierPrices setTierPrice(
+      String subject, long productId, long tierId, Inputs.TierPrice input) {
+    long tenant = tenant(subject).id;
+    // Exclusive product lock: a placement reading this tier price waits for the edit to commit.
+    Product.inTenant(tenant, productId, PESSIMISTIC_WRITE)
+        .orElseThrow(() -> new Problem(404, "Not found"));
+    var tier =
+        PriceTier.inTenant(tenant, tierId, NONE).orElseThrow(() -> new Problem(404, "Not found"));
+    BigDecimal price = input.price().setScale(2, RoundingMode.UNNECESSARY);
+    var row = ProductTierPrice.of(tenant, productId, tierId).orElseGet(ProductTierPrice::new);
+    row.tenantId = tenant;
+    row.productId = productId;
+    row.priceTierId = tierId;
+    row.price = price;
+    row.persist();
+    ProductTierPrice.flush();
+    return tierPrices(subject, tier.id);
+  }
+
+  @Transactional
+  public void clearTierPrice(String subject, long productId, long tierId) {
+    long tenant = tenant(subject).id;
+    Product.inTenant(tenant, productId, PESSIMISTIC_WRITE)
+        .orElseThrow(() -> new Problem(404, "Not found"));
+    PriceTier.inTenant(tenant, tierId, NONE).orElseThrow(() -> new Problem(404, "Not found"));
+    ProductTierPrice.delete(
+        "tenantId = ?1 and productId = ?2 and priceTierId = ?3", tenant, productId, tierId);
+  }
+
+  @Transactional
+  public Views.Reseller assignResellerTier(String subject, long id, Inputs.ResellerTier input) {
+    long tenant = tenant(subject).id;
+    var reseller =
+        Reseller.inTenant(tenant, id, PESSIMISTIC_WRITE)
+            .orElseThrow(() -> new Problem(404, "Not found"));
+    if (input.priceTierId() == null) {
+      reseller.priceTierId = null;
+    } else {
+      // Read-locked after the reseller (reseller -> tier), so a concurrent deactivation, which
+      // holds the tier's write lock, finishes first and the active check sees its result.
+      var tier =
+          PriceTier.inTenant(tenant, input.priceTierId(), PESSIMISTIC_READ)
+              .orElseThrow(() -> new Problem(404, "Not found"));
+      if (!tier.active) throw Problem.field("priceTierId", "Price tier is not active");
+      reseller.priceTierId = tier.id;
+    }
+    Reseller.flush();
+    return view(reseller, null);
   }
 
   private static String token() {

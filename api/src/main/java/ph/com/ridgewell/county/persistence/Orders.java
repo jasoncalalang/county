@@ -16,7 +16,8 @@ import ph.com.ridgewell.county.domain.*;
 
 /**
  * Ordering. Lock order, everywhere: reseller, then business, then products by ascending id,
- * then the order. Keep it when adding a workflow that takes more than one lock (ADR 0013).
+ * then the order (ADR 0013). Rows outside those four come after them, in the order the lock note
+ * of api/README.md lists (ADR 0015).
  */
 @ApplicationScoped
 public class Orders {
@@ -25,12 +26,12 @@ public class Orders {
 
   public record Placement(boolean replay, Views.Order order) {}
 
-  private static Reseller reseller(String token, LockModeType lock) {
+  static Reseller reseller(String token, LockModeType lock) {
     if (token == null || !token.matches("[A-Za-z0-9_-]{22}")) throw new Problem(404, "Not found");
     return Reseller.byToken(token, lock).orElseThrow(() -> new Problem(404, "Not found"));
   }
 
-  private static LocalDate delivery(Business business) {
+  static LocalDate delivery(Business business) {
     return delivery(business.cutoff, business.deliveryDays);
   }
 
@@ -104,6 +105,48 @@ public class Orders {
     return view(order(reseller.tenantId, id, reseller.id, NONE));
   }
 
+  /** A submitted line priced for a reseller: the product as read under its lock. */
+  record PricedLine(Product product, int quantity, BigDecimal price, BigDecimal total) {}
+
+  record Priced(List<PricedLine> lines, BigDecimal total) {}
+
+  /**
+   * Prices lines for a reseller at today's prices: the reseller's tier price where one is set,
+   * else the product's base price. Share-locks each product in ascending id order, which guards
+   * its tier prices too, so call it after the reseller and business locks (ADR 0013). Refuses a
+   * repeated or inactive product; a field error names the line as submitted.
+   */
+  static Priced price(Reseller reseller, List<Inputs.Line> submitted) {
+    Map<Long, Integer> firstIndex = new HashMap<>();
+    for (int i = 0; i < submitted.size(); i++)
+      if (firstIndex.putIfAbsent(submitted.get(i).productId(), i) != null)
+        throw Problem.field(
+            "lines[" + i + "].productId", "This product is already on another line");
+    List<PricedLine> lines = new ArrayList<>();
+    BigDecimal total = new BigDecimal("0.00");
+    // Ascending product ids: a stable lock order avoids deadlocks with product edits.
+    for (var line : submitted.stream().sorted(Comparator.comparing(Inputs.Line::productId)).toList()) {
+      String field = "lines[" + firstIndex.get(line.productId()) + "]";
+      var product =
+          Product.inTenant(reseller.tenantId, line.productId(), PESSIMISTIC_READ)
+              .orElseThrow(() -> new Problem(404, "Not found"));
+      if (!product.active)
+        throw Problem.field(field + ".productId", product.name + " is no longer available");
+      // The product's read lock guards the tier price read.
+      BigDecimal unitPrice =
+          reseller.priceTierId == null
+              ? product.price
+              : ProductTierPrice.of(reseller.tenantId, product.id, reseller.priceTierId)
+                  .map(t -> t.price)
+                  .orElse(product.price);
+      var lineTotal = Money.line(unitPrice, line.quantity());
+      total = total.add(lineTotal);
+      if (total.compareTo(MAXIMUM) > 0) throw Problem.field("lines", "Order total is too large");
+      lines.add(new PricedLine(product, line.quantity(), unitPrice, lineTotal));
+    }
+    return new Priced(lines, total);
+  }
+
   @Transactional
   public Placement place(String token, Inputs.Place input) {
     var reseller = reseller(token, PESSIMISTIC_WRITE);
@@ -121,42 +164,17 @@ public class Orders {
         throw new Problem(409, "Idempotency key already used");
       return new Placement(true, view(existing.get()));
     }
-    var submitted = input.lines();
-    // A field error names the line as submitted; a repeated product names its later line.
-    Map<Long, Integer> firstIndex = new HashMap<>();
-    for (int i = 0; i < submitted.size(); i++)
-      if (firstIndex.putIfAbsent(submitted.get(i).productId(), i) != null)
-        throw Problem.field(
-            "lines[" + i + "].productId", "This product is already on another line");
+    var priced = price(reseller, input.lines());
     List<OrderLine> lines = new ArrayList<>();
-    BigDecimal total = new BigDecimal("0.00");
-    // Ascending product ids: a stable lock order avoids deadlocks with product edits.
-    for (var line : submitted.stream().sorted(Comparator.comparing(Inputs.Line::productId)).toList()) {
-      String field = "lines[" + firstIndex.get(line.productId()) + "]";
-      var product =
-          Product.inTenant(reseller.tenantId, line.productId(), PESSIMISTIC_READ)
-              .orElseThrow(() -> new Problem(404, "Not found"));
-      if (!product.active)
-        throw Problem.field(field + ".productId", product.name + " is no longer available");
-      // The reseller's tier price if set, else the product's base price. Captured here and
-      // immutable thereafter (ADR 0012). The product's read lock guards the tier price read.
-      BigDecimal unitPrice =
-          reseller.priceTierId == null
-              ? product.price
-              : ProductTierPrice.of(reseller.tenantId, product.id, reseller.priceTierId)
-                  .map(t -> t.price)
-                  .orElse(product.price);
-      var lineTotal = Money.line(unitPrice, line.quantity());
-      total = total.add(lineTotal);
-      if (total.compareTo(MAXIMUM) > 0) throw Problem.field("lines", "Order total is too large");
+    for (var p : priced.lines()) {
       var saved = new OrderLine();
       saved.tenantId = reseller.tenantId;
-      saved.productId = product.id;
-      saved.productName = product.name;
-      saved.unit = product.unit;
-      saved.quantity = line.quantity();
-      saved.price = unitPrice;
-      saved.total = lineTotal;
+      saved.productId = p.product().id;
+      saved.productName = p.product().name;
+      saved.unit = p.product().unit;
+      saved.quantity = p.quantity();
+      saved.price = p.price();
+      saved.total = p.total();
       lines.add(saved);
     }
     var order = new PurchaseOrder();
@@ -165,7 +183,7 @@ public class Orders {
     order.number = business.nextOrderNumber++;
     order.placedAt = Times.now();
     order.deliveryDate = delivery(business);
-    order.total = total;
+    order.total = priced.total();
     order.note = input.note() == null ? "" : input.note();
     order.idempotencyKey = input.idempotencyKey();
     order.persist();
@@ -228,7 +246,7 @@ public class Orders {
         .toList();
   }
 
-  private static Map<Long, String> resellerNames(long tenant, Collection<Long> ids) {
+  static Map<Long, String> resellerNames(long tenant, Collection<Long> ids) {
     Map<Long, String> names = new HashMap<>();
     for (Reseller r :
         Reseller.<Reseller>list("tenantId = ?1 and id in ?2", tenant, new HashSet<>(ids)))
@@ -325,13 +343,13 @@ public class Orders {
         .orElseThrow(() -> new Problem(404, "Not found"));
   }
 
-  private static Views.Order view(PurchaseOrder o) {
+  static Views.Order view(PurchaseOrder o) {
     return view(
         o,
         OrderLine.list("tenantId = ?1 and orderId = ?2", Sort.by("id"), o.tenantId, o.id));
   }
 
-  private static Views.Order view(PurchaseOrder o, List<OrderLine> lines) {
+  static Views.Order view(PurchaseOrder o, List<OrderLine> lines) {
     return new Views.Order(
         o.id,
         o.resellerId,

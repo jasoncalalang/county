@@ -139,4 +139,53 @@ public final class Views {
   @Schema(name = "ProductionRunView")
   public record ProductionRun(
       @Schema(format = "date") String date, List<ProductionLine> lines, long unconfirmedCount) {}
+
+  @Schema(name = "QuoteLineView")
+  public record QuoteLine(
+      long productId,
+      String productName,
+      @Schema(enumeration = {"pack", "kg", "pc"}) String unit,
+      int quantity,
+      BigDecimal price,
+      BigDecimal total) {}
+
+  @Schema(name = "QuoteSummaryView")
+  public record QuoteSummary(
+      long id,
+      long number,
+      long resellerId,
+      String resellerName,
+      @Schema(format = "date-time") String createdAt,
+      @Schema(format = "date") String deliveryDate,
+      @Schema(format = "date") String expiresOn,
+      @Schema(enumeration = {"draft", "sent", "accepted", "declined", "expired", "cancelled"})
+          String status,
+      BigDecimal total) {}
+
+  @Schema(name = "QuoteView")
+  public record Quote(
+      long id,
+      long resellerId,
+      String resellerName,
+      long number,
+      @Schema(format = "date-time") String createdAt,
+      @Schema(
+              format = "date",
+              description =
+                  "Delivery date of an order placed when the quote was created. Accepting places"
+                      + " an order whose delivery date is computed at acceptance.")
+          String deliveryDate,
+      @Schema(format = "date", description = "Last day the reseller can accept") String expiresOn,
+      @Schema(
+              enumeration = {"draft", "sent", "accepted", "declined", "expired", "cancelled"},
+              description = "A sent quote reads as expired once its last day has passed")
+          String status,
+      BigDecimal total,
+      String note,
+      @Schema(nullable = true) Long acceptedOrderId,
+      @Schema(format = "date-time", nullable = true) String sentAt,
+      @Schema(format = "date-time", nullable = true) String acceptedAt,
+      @Schema(format = "date-time", nullable = true) String declinedAt,
+      @Schema(format = "date-time", nullable = true) String cancelledAt,
+      List<QuoteLine> lines) {}
 }

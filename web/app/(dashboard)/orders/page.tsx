@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { OrderSummaryView, OrderView, ResellerView } from "@/lib/api-types";
 import { useApi } from "@/lib/dashboard/api";
-import { countByStatus, sortOrders, summarize } from "@/lib/dashboard/orders";
+import { countByStatus, itemsSummary, sortOrders, summarize } from "@/lib/dashboard/orders";
 import { formatClock, formatMoney, formatPlaced, formatShortDate, STATUS_LABEL, type Status } from "@/lib/format";
 import { PaidBadge, StatusBadge } from "../_components/badges";
 import { DatePicker } from "../_components/date-picker";
@@ -29,19 +29,17 @@ export default function OrdersPage() {
 
   const [loaded, setLoaded] = useState<{ date: string; list: OrderSummaryView[] } | null>(null);
   const orders = loaded && loaded.date === date ? loaded.list : null;
-  const [resellers, setResellers] = useState<Map<number, ResellerView>>(new Map());
+  // Only an empty list needs the resellers: it tells a new business from a quiet day.
+  const [hasResellers, setHasResellers] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [failures, setFailures] = useState(0);
 
   const load = useCallback(async () => {
     if (!date || !api.ready) return;
     try {
-      const [list, people] = await Promise.all([
-        api.get<OrderSummaryView[]>(`/orders?date=${date}`),
-        api.get<ResellerView[]>("/resellers"),
-      ]);
+      const list = await api.get<OrderSummaryView[]>(`/orders?date=${date}`);
+      if (list.length === 0) setHasResellers((await api.get<ResellerView[]>("/resellers")).length > 0);
       setLoaded({ date, list });
-      setResellers(new Map(people.map((r) => [r.id, r])));
       setUpdatedAt(Date.now());
       setFailures(0);
     } catch {
@@ -59,7 +57,13 @@ export default function OrdersPage() {
 
   const onUpdated = useCallback(
     (updated: OrderView) => {
-      setLoaded((all) => all && { ...all, list: all.list.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)) });
+      setLoaded(
+        (all) =>
+          all && {
+            ...all,
+            list: all.list.map((o) => (o.id === updated.id ? { ...o, ...updated, items: o.items } : o)),
+          },
+      );
       load();
     },
     [load],
@@ -79,7 +83,6 @@ export default function OrdersPage() {
     () => sortOrders((orders ?? []).filter((o) => filter === "all" || o.status === filter)),
     [orders, filter],
   );
-  const name = (o: OrderSummaryView) => resellers.get(o.resellerId)?.name ?? `Reseller ${o.resellerId}`;
 
   return (
     <>
@@ -91,7 +94,7 @@ export default function OrdersPage() {
       {orders === null ? (
         <Placeholder />
       ) : orders.length === 0 ? (
-        resellers.size === 0 ? (
+        !hasResellers ? (
           <div className={ui.empty}>
             <h2 className={ui.heading}>No orders yet</h2>
             <p>Add a reseller and send them their link.</p>
@@ -131,6 +134,7 @@ export default function OrdersPage() {
                   <th scope="col">#</th>
                   <th scope="col">Reseller</th>
                   <th scope="col">Placed</th>
+                  <th scope="col">Items</th>
                   <th scope="col" className={ui.right}>
                     Total
                   </th>
@@ -147,8 +151,11 @@ export default function OrdersPage() {
                     <td>
                       <Link href={`/orders/${o.id}`}>#{o.number}</Link>
                     </td>
-                    <td>{name(o)}</td>
+                    <td>{o.resellerName}</td>
                     <td className={ui.small}>{formatPlaced(o.placedAt)}</td>
+                    <td className={`${ui.small} ${ui.items}`} title={itemsSummary(o.items)}>
+                      {itemsSummary(o.items)}
+                    </td>
                     <td className={ui.right}>{formatMoney(o.total)}</td>
                     <td>
                       <StatusBadge status={o.status} />
@@ -168,11 +175,11 @@ export default function OrdersPage() {
               <li key={o.id}>
                 <div className={ui.cardLine}>
                   <strong>
-                    <Link href={`/orders/${o.id}`}>#{o.number}</Link> · {name(o)}
+                    <Link href={`/orders/${o.id}`}>#{o.number}</Link> · {o.resellerName}
                   </strong>
                   <strong className={ui.num}>{formatMoney(o.total)}</strong>
                 </div>
-                <div className={ui.small}>Placed {formatPlaced(o.placedAt)}</div>
+                <div className={`${ui.small} ${ui.items}`}>{itemsSummary(o.items)}</div>
                 <div className={ui.cardLine}>
                   <span className={ui.badges}>
                     <StatusBadge status={o.status} />

@@ -122,7 +122,7 @@ export default function OrderDetailPage() {
                     <span className={ui.num}>{formatMobile(reseller.mobile)}</span>
                   </>
                 ) : (
-                  `Reseller ${order.resellerId}`
+                  <strong>{order.resellerName}</strong>
                 )}
               </dd>
             </div>

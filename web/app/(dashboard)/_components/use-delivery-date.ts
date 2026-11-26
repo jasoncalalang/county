@@ -1,9 +1,9 @@
 "use client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import type { OrderSummaryView } from "@/lib/api-types";
+import type { OrderSummaryView, SettingsPreviewView } from "@/lib/api-types";
 import { useApi } from "@/lib/dashboard/api";
-import { defaultDeliveryDate } from "@/lib/dashboard/orders";
+import { defaultDeliveryDate, previewQuery } from "@/lib/dashboard/orders";
 import { useShell } from "./shell";
 
 /** The page's delivery date: `?date=` when given, else the default of functional spec 3.4. */
@@ -18,13 +18,20 @@ export function useDeliveryDate(): [string | null, (date: string) => void] {
 
   useEffect(() => {
     if (fromUrl || fallback || !api.ready) return;
+    const next = api
+      .get<SettingsPreviewView>(`/settings/preview?${previewQuery(business.cutoff, business.deliveryDays)}`)
+      .then((p) => p.deliveryDate)
+      .catch(() => undefined);
     Promise.all([
       api.get<OrderSummaryView[]>("/orders?status=placed"),
       api.get<OrderSummaryView[]>("/orders?status=confirmed"),
+      next,
     ])
-      .then(([placed, confirmed]) => setFallback(defaultDeliveryDate([...placed, ...confirmed], business.deliveryDays)))
-      .catch(() => setFallback(defaultDeliveryDate([], business.deliveryDays)));
-  }, [api, business.deliveryDays, fallback, fromUrl]);
+      .then(([placed, confirmed, nextDate]) =>
+        setFallback(defaultDeliveryDate([...placed, ...confirmed], business.deliveryDays, nextDate)),
+      )
+      .catch(async () => setFallback(defaultDeliveryDate([], business.deliveryDays, await next)));
+  }, [api, business.cutoff, business.deliveryDays, fallback, fromUrl]);
 
   const setDate = useCallback(
     (date: string) => {

@@ -13,6 +13,15 @@ export class ApiError extends Error {
   get status() {
     return this.problem.status;
   }
+  /** Field messages keyed by JSON path, e.g. `{ mobile: "Enter a Philippine mobile number" }`. */
+  get fields(): Record<string, string> {
+    return this.problem.errors ?? {};
+  }
+}
+
+/** The API's message for one field of a failed request, if it named that field. */
+export function fieldError(error: unknown, field: string): string | undefined {
+  return error instanceof ApiError ? error.fields[field] : undefined;
 }
 
 type Method = "GET" | "POST" | "PUT";

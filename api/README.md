@@ -72,10 +72,13 @@ Do not log bearer tokens/order links. API responses are `no-store` with no refer
   numbering, order idempotency and state changes use JPA pessimistic locks, always in
   this order: reseller, business, products by ascending id, order. Keep that order in
   new workflows. A product's tier prices are guarded by that product's lock: take
-  it before reading or writing one. Assigning a reseller's tier also share-locks the
-  `price_tier` row after the reseller, so a concurrent deactivation commits first; that
-  lock is outside the ADR 0013 chain and no workflow may take it before a reseller,
-  business or product lock. Flyway owns the schema; Hibernate never generates or alters it.
+  it before reading or writing one. Flyway owns the schema; Hibernate never generates
+  or alters it.
+- Added lock targets (ADR 0015 in county-architecture): a row outside those four is
+  locked only after every one of the four the workflow takes, and added targets are
+  taken in this order. Add a line here in the PR that adds a target.
+  1. `price_tier`: assigning a reseller's tier share-locks it after the reseller, so a
+     concurrent deactivation commits first.
 - First sign-in takes a PostgreSQL advisory lock through a native query on the same
   entity manager, so concurrent first calls create one user.
 - Reseller token is stored as a bearer secret so an owner can copy its current link.

@@ -222,4 +222,27 @@ final class DiscrepancyFixtures {
   static Response listAsOwner(String query) {
     return given().basePath("").get("/api/discrepancies" + query);
   }
+
+  /** An open report with one line, 2 of the 10 hams short, written straight into the tables. */
+  static long report(Connection c, Shop s, Order o, String filedBy) throws SQLException {
+    long report =
+        TestSql.id(
+            TestSql.one(
+                c,
+                "INSERT INTO discrepancy_report(tenant_id,order_id,filed_by,filed_at,shortfall_total,"
+                    + "idempotency_key) VALUES (?,?,?,now(),240.00,?) RETURNING id",
+                s.tenant(),
+                o.id(),
+                filedBy,
+                UUID.randomUUID()));
+    TestSql.execute(
+        c,
+        "INSERT INTO discrepancy_line(tenant_id,report_id,product_id,product_name,unit,"
+            + "ordered_quantity,received_quantity,price,shortfall_total) VALUES"
+            + " (?,?,?,'Hamonado','pack',10,8,120.00,240.00)",
+        s.tenant(),
+        report,
+        s.ham());
+    return report;
+  }
 }

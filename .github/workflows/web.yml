@@ -1,0 +1,58 @@
+name: Web verification
+on:
+  pull_request:
+    paths: ['web/**', 'api/**', '.github/workflows/web.yml']
+  push:
+    branches: [main]
+    paths: ['web/**', 'api/**', '.github/workflows/web.yml']
+permissions:
+  contents: read
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: county
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: county_e2e
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: End to end, fake API (fast tier)
+        run: npm run e2e -- --trace off
+      - name: Build the API for the real-stack tier
+        working-directory: api
+        run: ./gradlew --no-daemon quarkusBuild -x test
+      - name: End to end, real stack (web, API, PostgreSQL)
+        run: npm run e2e:real -- --trace off
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: web/test-results
+          if-no-files-found: ignore

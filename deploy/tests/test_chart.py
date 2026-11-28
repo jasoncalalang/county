@@ -26,7 +26,8 @@ def render(*sets, tag=SHA, values=DEMO_VALUES):
     if tag is not None:
         args += ["--set-string", f"image.tag={tag}"]
     for item in sets:
-        args += ["--set-string", item] if not item.endswith("=null") else ["--set", item]
+        typed = item.endswith(("=null", "=true", "=false"))
+        args += ["--set" if typed else "--set-string", item]
     return helm(*args)
 
 

@@ -14,6 +14,10 @@ reset();
 
 const now = () => new Date().toISOString();
 const token = () => randomBytes(16).toString("base64url");
+// A link works for 90 days after it is issued (ADR 0018).
+const linkExpiry = () => new Date(Date.now() + 90 * 86_400_000).toISOString();
+// The reseller behind a usable link: a blocked or expired link is the same 404 as an unknown one.
+const liveReseller = (t) => db.resellers.find((r) => r.token === t && r.status !== "blocked" && Date.parse(r.linkExpiresAt) > Date.now());
 
 /** Tomorrow in Manila, then the next configured delivery day. Good enough for a fake. */
 function deliveryDate(days = db.tenant.deliveryDays) {
@@ -198,10 +202,17 @@ createServer(async (req, res) => {
   let x;
   try {
     if (req.method === "POST" && path === "/__reset") return reset(), send(res, 204);
+    // Test hook: ninety days have passed for this link.
+    if (req.method === "POST" && (x = m(/^\/__expire\/([^/]+)$/))) {
+      const r = db.resellers.find((q) => q.token === x[1]);
+      if (!r) return problem(res, 404, "Not found");
+      r.linkExpiresAt = new Date(Date.now() - 60_000).toISOString();
+      return send(res, 204);
+    }
 
     // Reseller (token) quote routes
     if ((x = m(/^\/order\/([^/]+)\/quotes(?:\/(\d+)(?:\/(accept|decline))?)?$/))) {
-      const reseller = db.resellers.find((r) => r.token === x[1] && r.status !== "blocked");
+      const reseller = liveReseller(x[1]);
       if (!reseller) return problem(res, 404, "Not found");
       if (!x[2]) {
         const open = db.quotes.filter((q) => q.resellerId === reseller.id && quoteStatus(q) === "sent");
@@ -244,7 +255,7 @@ createServer(async (req, res) => {
 
     // Reseller (token) short-delivery routes
     if ((x = m(/^\/order\/([^/]+)\/orders\/(\d+)\/discrepancy(?:\/(approve|decline))?$/))) {
-      const reseller = db.resellers.find((r) => r.token === x[1] && r.status !== "blocked");
+      const reseller = liveReseller(x[1]);
       const o = reseller && db.orders.find((y) => y.id === Number(x[2]) && y.resellerId === reseller.id);
       if (!o) return problem(res, 404, "Not found");
       if (x[3]) return resolveReport(req, res, o, "reseller", x[3]);
@@ -255,7 +266,7 @@ createServer(async (req, res) => {
 
     // Reseller (token) routes
     if ((x = m(/^\/order\/([^/]+)(\/orders(?:\/(\d+)(\/cancel)?)?)?$/))) {
-      const reseller = db.resellers.find((r) => r.token === x[1] && r.status !== "blocked");
+      const reseller = liveReseller(x[1]);
       if (!reseller) return problem(res, 404, "Not found");
       if (!x[2] && req.method === "GET") {
         return send(res, 200, {
@@ -362,7 +373,7 @@ createServer(async (req, res) => {
         const mobile = `+63${digits}`;
         if (db.resellers.some((r) => r.mobile === mobile)) return problem(res, 409, "A record with those details already exists");
         const t = token();
-        const r = { id: db.nextId++, name: input.name, mobile, status: "invited", token: t, orderLink: `${process.env.PUBLIC_URL}/order/${t}`, lastOrderAt: null };
+        const r = { id: db.nextId++, name: input.name, mobile, status: "invited", token: t, orderLink: `${process.env.PUBLIC_URL}/order/${t}`, linkExpiresAt: linkExpiry(), lastOrderAt: null };
         db.resellers.push(r);
         return send(res, 201, r);
       }
@@ -376,6 +387,7 @@ createServer(async (req, res) => {
       if (x[2] === "reissue-link") {
         r.token = token();
         r.orderLink = `${process.env.PUBLIC_URL}/order/${r.token}`;
+        r.linkExpiresAt = linkExpiry();
       }
       return send(res, 200, r);
     }

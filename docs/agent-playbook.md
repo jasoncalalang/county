@@ -134,7 +134,7 @@ provided `COUNTY_TEST_JDBC_URL`. Never point tests at production credentials.
 
 | ID | Item | Priority | Status | Blocked by |
 |---|---|---|---|---|
-| W1 | Widen quantities + introduce units | P0 | not started | — (D2: ADR 0017) |
+| W1 | Widen quantities + introduce units | P0 | done (V7 migration; `measurement_unit` deferred, see W1) | — (D2: ADR 0017) |
 | W2 | Harden the public order surface | P0 | not started | — (D3: ADR 0018) |
 | W3 | `order_event` (actor-level history) | P0 | done (V6 migration) | — |
 | W4 | Rename `purchase_order` → `sales_order` | P0 | done (V5 migration) | — |
@@ -197,6 +197,12 @@ express `1.5 kg`. A wholesaler of rice, meat or produce takes fractional orders.
 `POST /api/order/{token}/orders` with `{"quantity":1.5}` returns `201` and a `line total` of `price × 1.5`.
 
 **Do not** change `order_line.price` or `total` scale, and do not make `quantity` nullable.
+
+**As built.** V7 widened `order_line.quantity` and `quote_line.quantity` to `NUMERIC(7,3)` (four integer
+digits is the rule, so the column enforces it) with the 0..9999 check. Only `kg` products take a fraction.
+The `measurement_unit` table and `product.measurement_unit_id` above were left out: no endpoint manages
+units and ADR 0017 does not ask for them, so `product.unit` stays the unit. Build them with the first
+feature that reads them.
 
 ### W2 — Harden the public order surface  *(P0, D3 decided: ADR 0018)*
 

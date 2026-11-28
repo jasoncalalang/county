@@ -227,10 +227,13 @@ a reseller say to each other on the phone.
 
 - Prices and totals are pesos with centavos, stored as `numeric(12,2)`.
   Shown as `₱1,234.50`.
-- Quantity is a whole number from 1 to 9999 of the product's unit. "Half a
-  kilo" is a separate product if the business sells it. No decimals in v1.
-- Line total is quantity times the unit price at placement. Order total is
-  the sum of line totals. No tax, discount or delivery fee in v1.
+- Quantity is a decimal above 0 and at most 9999, with up to three decimal
+  places, of the product's unit (ADR 0017, which supersedes "No decimals in
+  v1"). Only products sold by the kg take a fraction; packs and pieces stay
+  whole numbers.
+- Line total is quantity times the unit price at placement, rounded half up
+  to centavos, and at least ₱0.01. Order total is the sum of the rounded line
+  totals. No tax, discount or delivery fee in v1.
 
 ### 5.4 Mobile numbers
 

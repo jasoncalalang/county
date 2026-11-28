@@ -17,6 +17,7 @@ import ph.com.ridgewell.county.domain.Quantity;
 import ph.com.ridgewell.county.domain.QuoteRules;
 import ph.com.ridgewell.county.domain.QuoteRules.Actor;
 import ph.com.ridgewell.county.domain.QuoteRules.Status;
+import ph.com.ridgewell.county.domain.ResellerStatus;
 
 /**
  * Quotes (build plan §3). The owner creates a quote for one reseller and sends it; the reseller
@@ -74,7 +75,7 @@ public class Quotes {
     var reseller =
         Reseller.inTenant(tenant, input.resellerId(), PESSIMISTIC_READ)
             .orElseThrow(() -> new Problem(404, "Not found"));
-    if (reseller.status.equals("blocked"))
+    if (reseller.status.equals(ResellerStatus.BLOCKED.wire()))
       throw Problem.field("resellerId", "This reseller is blocked");
     if (input.expiresOn().isBefore(today()))
       throw Problem.field("expiresOn", "Choose today or a later day");
@@ -271,7 +272,7 @@ public class Quotes {
     q.acceptedAt = now;
     q.acceptedOrderId = order.id;
     reseller.hasOrdered = true;
-    reseller.status = "active";
+    reseller.status = ResellerStatus.ACTIVE.wire();
     SalesOrder.flush();
     return new Acceptance(false, Orders.view(order, lines));
   }

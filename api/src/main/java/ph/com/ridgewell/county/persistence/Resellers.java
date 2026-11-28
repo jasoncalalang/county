@@ -15,6 +15,7 @@ import ph.com.ridgewell.county.api.Inputs;
 import ph.com.ridgewell.county.api.Problem;
 import ph.com.ridgewell.county.api.Views;
 import ph.com.ridgewell.county.domain.PhilippineMobile;
+import ph.com.ridgewell.county.domain.ResellerStatus;
 
 /**
  * The owner's resellers: list, create, update, and the block, unblock and reissue actions. The
@@ -73,7 +74,7 @@ public class Resellers {
   @Transactional
   public Views.Reseller block(String subject, long id) {
     var reseller = locked(Owners.tenant(subject).id, id);
-    reseller.status = "blocked";
+    reseller.status = ResellerStatus.BLOCKED.wire();
     Reseller.flush();
     return view(reseller, null);
   }
@@ -82,7 +83,8 @@ public class Resellers {
   @Transactional
   public Views.Reseller unblock(String subject, long id) {
     var reseller = locked(Owners.tenant(subject).id, id);
-    reseller.status = reseller.hasOrdered ? "active" : "invited";
+    reseller.status =
+        (reseller.hasOrdered ? ResellerStatus.ACTIVE : ResellerStatus.INVITED).wire();
     Reseller.flush();
     return view(reseller, null);
   }

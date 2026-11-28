@@ -148,7 +148,7 @@ public class Orders {
       line.persist();
     }
     reseller.hasOrdered = true;
-    reseller.status = "active";
+    reseller.status = ResellerStatus.ACTIVE.wire();
     SalesOrder.flush();
     return new Placement(false, view(order, lines));
   }

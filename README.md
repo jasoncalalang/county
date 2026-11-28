@@ -10,7 +10,11 @@ Ordering between wholesalers and their resellers. Design spec in
 |---|---|
 | `api/` | Quarkus REST API (Java 21, Gradle). See [`api/README.md`](api/README.md). |
 | `web/` | Next.js dashboard and reseller order page. See [`web/README.md`](web/README.md). |
+| `deploy/` | Helm chart, deployment tests and runbook. See [`deploy/README.md`](deploy/README.md). |
 | `docs/` | Specs. |
+
+Images are built from `api/Dockerfile` and `web/Dockerfile`; the `Jenkinsfile` builds and deploys `main`.
+Nothing is deployed yet.
 
 The API tests need a Postgres and no Docker; `api/README.md` says how to
 provide one.

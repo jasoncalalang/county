@@ -66,6 +66,11 @@ export COUNTY_TEST_DB_PASSWORD=test-only
 cd api && COUNTY_TEST_SCHEMA=county_test_$(date +%s) ./gradlew build
 ```
 
+Work on `deploy/` also needs Helm 3 and PyYAML on the machine (`python3 -m unittest discover deploy/tests`),
+and a Docker daemon for the image smoke test (`deploy/tests/smoke.sh`, see `deploy/README.md`). Neither is
+part of the api or web baseline above. Install Helm only from a pinned release with its published checksum
+verified; `.github/workflows/deploy.yml` shows how.
+
 Do not install or upgrade the JDK or Node to make a host fit. If the toolchain is wrong, report it and stop;
 a local install silently diverges from CI.
 
@@ -144,6 +149,7 @@ provided `COUNTY_TEST_JDBC_URL`. Never point tests at production credentials.
 | W8 | Product variants | P1 | not started | W1, W7 |
 | W9 | Delivery calendar depth | P2 | not started | — |
 | W10 | Per-reseller pricing | P1 (ADR 0014) | done (county #4) | — |
+| D5 | Deployment artifacts (images, Helm chart, Jenkinsfile; roadmap item 5) | P0 | built, never deployed; waits for review, the first `images` CI run and Jason's go-ahead (`deploy/README.md`) | — (ADR 0006 to 0011) |
 
 `P0` = breaks the v1 promise or forces a data rewrite. `P1` = next slice. `P2` = explicit ceiling; do not
 start without a named customer.

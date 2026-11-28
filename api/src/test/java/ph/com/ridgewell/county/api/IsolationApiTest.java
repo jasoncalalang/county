@@ -313,7 +313,7 @@ class IsolationApiTest {
     if (response.statusCode() == 201) {
       long id = response.jsonPath().getLong("id");
       try (var c = dataSource.getConnection();
-          var s = c.prepareStatement("SELECT tenant_id FROM purchase_order WHERE id=?")) {
+          var s = c.prepareStatement("SELECT tenant_id FROM sales_order WHERE id=?")) {
         s.setLong(1, id);
         try (var rs = s.executeQuery()) {
           assertTrue(rs.next());

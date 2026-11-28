@@ -79,7 +79,7 @@ public class Orders {
                     new Views.CatalogProduct(
                         p.id, p.name, p.unit, tierPrices.getOrDefault(p.id, p.price)))
             .toList(),
-        PurchaseOrder.<PurchaseOrder>find(
+        SalesOrder.<SalesOrder>find(
                 "tenantId = ?1 and resellerId = ?2",
                 Sort.descending("placedAt", "id"),
                 reseller.tenantId,
@@ -153,7 +153,7 @@ public class Orders {
     // The business lock serializes numbering and the idempotency check for this business.
     Business business = Business.findById(reseller.tenantId, PESSIMISTIC_WRITE);
     var existing =
-        PurchaseOrder.<PurchaseOrder>find(
+        SalesOrder.<SalesOrder>find(
                 "tenantId = ?1 and idempotencyKey = ?2",
                 reseller.tenantId,
                 input.idempotencyKey())
@@ -177,7 +177,7 @@ public class Orders {
       saved.total = p.total();
       lines.add(saved);
     }
-    var order = new PurchaseOrder();
+    var order = new SalesOrder();
     order.tenantId = reseller.tenantId;
     order.resellerId = reseller.id;
     order.number = business.nextOrderNumber++;
@@ -193,7 +193,7 @@ public class Orders {
     }
     reseller.hasOrdered = true;
     reseller.status = "active";
-    PurchaseOrder.flush();
+    SalesOrder.flush();
     return new Placement(false, view(order, lines));
   }
 
@@ -216,8 +216,8 @@ public class Orders {
       params.put("status", statusValue(status).name().toLowerCase(Locale.ROOT));
     }
     long tenant = (Long) params.get("tenant");
-    List<PurchaseOrder> found =
-        PurchaseOrder.<PurchaseOrder>list(query.toString(), Sort.by("number"), params);
+    List<SalesOrder> found =
+        SalesOrder.<SalesOrder>list(query.toString(), Sort.by("number"), params);
     if (found.isEmpty()) return List.of();
     List<Long> ids = found.stream().map(o -> o.id).toList();
     Map<Long, List<Views.OrderItem>> items = new HashMap<>();
@@ -301,7 +301,7 @@ public class Orders {
         default -> throw new Problem(409, "Invalid transition");
       }
     }
-    PurchaseOrder.flush();
+    SalesOrder.flush();
     return view(order);
   }
 
@@ -314,7 +314,7 @@ public class Orders {
             .createQuery(
                 "select l.productId, p.name, l.unit, sum(l.quantity), count(distinct o.id)"
                     + " from OrderLine l"
-                    + " join PurchaseOrder o on o.id = l.orderId and o.tenantId = l.tenantId"
+                    + " join SalesOrder o on o.id = l.orderId and o.tenantId = l.tenantId"
                     + " join Product p on p.tenantId = l.tenantId and p.id = l.productId"
                     + " where o.tenantId = ?1 and o.deliveryDate = ?2 and o.status = 'confirmed'"
                     + " group by l.productId, p.name, l.unit order by l.productId",
@@ -333,23 +333,23 @@ public class Orders {
                         ((Number) r[4]).longValue()))
             .toList();
     long unconfirmed =
-        PurchaseOrder.count(
+        SalesOrder.count(
             "tenantId = ?1 and deliveryDate = ?2 and status = 'placed'", tenant, delivery);
     return new Views.ProductionRun(date, lines, unconfirmed);
   }
 
-  private static PurchaseOrder order(long tenant, long id, Long reseller, LockModeType lock) {
-    return PurchaseOrder.inTenant(tenant, id, reseller, lock)
+  private static SalesOrder order(long tenant, long id, Long reseller, LockModeType lock) {
+    return SalesOrder.inTenant(tenant, id, reseller, lock)
         .orElseThrow(() -> new Problem(404, "Not found"));
   }
 
-  static Views.Order view(PurchaseOrder o) {
+  static Views.Order view(SalesOrder o) {
     return view(
         o,
         OrderLine.list("tenantId = ?1 and orderId = ?2", Sort.by("id"), o.tenantId, o.id));
   }
 
-  static Views.Order view(PurchaseOrder o, List<OrderLine> lines) {
+  static Views.Order view(SalesOrder o, List<OrderLine> lines) {
     return new Views.Order(
         o.id,
         o.resellerId,

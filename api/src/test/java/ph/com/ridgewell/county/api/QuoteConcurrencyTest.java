@@ -64,7 +64,7 @@ class QuoteConcurrencyTest {
       var row =
           TestSql.one(
               c,
-              "SELECT count(*) AS orders, max(number) AS number FROM purchase_order WHERE"
+              "SELECT count(*) AS orders, max(number) AS number FROM sales_order WHERE"
                   + " tenant_id=?",
               t.id());
       assertEquals(1L, ((Number) row.get("orders")).longValue());
@@ -101,7 +101,7 @@ class QuoteConcurrencyTest {
       assertEquals(
           0L,
           ((Number)
-                  TestSql.one(c, "SELECT count(*) AS n FROM purchase_order WHERE tenant_id=?", t.id())
+                  TestSql.one(c, "SELECT count(*) AS n FROM sales_order WHERE tenant_id=?", t.id())
                       .get("n"))
               .longValue());
     }

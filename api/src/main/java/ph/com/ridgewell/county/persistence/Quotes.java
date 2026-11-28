@@ -222,7 +222,7 @@ public class Quotes {
     Business business = Business.findById(reseller.tenantId, PESSIMISTIC_WRITE);
     var q = visible(reseller, id, PESSIMISTIC_WRITE);
     var keyed =
-        PurchaseOrder.<PurchaseOrder>find(
+        SalesOrder.<SalesOrder>find(
                 "tenantId = ?1 and idempotencyKey = ?2",
                 reseller.tenantId,
                 input.idempotencyKey())
@@ -232,12 +232,12 @@ public class Quotes {
       throw new Problem(409, "Idempotency key already used");
     if (q.acceptedOrderId != null)
       return new Acceptance(
-          true, Orders.view(PurchaseOrder.<PurchaseOrder>findById(q.acceptedOrderId)));
+          true, Orders.view(SalesOrder.<SalesOrder>findById(q.acceptedOrderId)));
     move(q, Status.ACCEPTED, Actor.RESELLER);
     List<QuoteLine> quoted =
         QuoteLine.list("tenantId = ?1 and quoteId = ?2", Sort.by("id"), q.tenantId, q.id);
     Instant now = Times.now();
-    var order = new PurchaseOrder();
+    var order = new SalesOrder();
     order.tenantId = reseller.tenantId;
     order.resellerId = reseller.id;
     order.number = business.nextOrderNumber++;
@@ -266,7 +266,7 @@ public class Quotes {
     q.acceptedOrderId = order.id;
     reseller.hasOrdered = true;
     reseller.status = "active";
-    PurchaseOrder.flush();
+    SalesOrder.flush();
     return new Acceptance(false, Orders.view(order, lines));
   }
 

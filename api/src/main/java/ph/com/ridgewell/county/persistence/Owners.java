@@ -167,9 +167,9 @@ public class Owners {
     long tenant = tenant(subject).id;
     Map<Long, Object> lastOrders = new HashMap<>();
     for (Object[] row :
-        PurchaseOrder.getEntityManager()
+        SalesOrder.getEntityManager()
             .createQuery(
-                "select o.resellerId, max(o.placedAt) from PurchaseOrder o"
+                "select o.resellerId, max(o.placedAt) from SalesOrder o"
                     + " where o.tenantId = ?1 group by o.resellerId",
                 Object[].class)
             .setParameter(1, tenant)

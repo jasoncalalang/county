@@ -8,10 +8,13 @@ import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
 
-/** An order. Lines, note, delivery date and total never change after placement (ADR 0012). */
+/**
+ * A reseller's order to the business: a sales order (ADR 0016). Lines, note, delivery date and
+ * total never change after placement (ADR 0012).
+ */
 @Entity
-@Table(name = "purchase_order")
-public class PurchaseOrder extends PanacheEntityBase {
+@Table(name = "sales_order")
+public class SalesOrder extends PanacheEntityBase {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   public Long id;
@@ -51,7 +54,7 @@ public class PurchaseOrder extends PanacheEntityBase {
   public Instant paidAt;
 
   /** Scoped to the tenant, and to the reseller when one is given. */
-  public static Optional<PurchaseOrder> inTenant(
+  public static Optional<SalesOrder> inTenant(
       long tenant, long id, Long reseller, LockModeType lock) {
     var query =
         reseller == null

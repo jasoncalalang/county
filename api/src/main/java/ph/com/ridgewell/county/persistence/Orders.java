@@ -266,61 +266,6 @@ public class Orders {
   }
 
   @Transactional
-  public Views.Order transition(
-      String subject, String token, long orderId, String target, boolean paid) {
-    long tenant;
-    Long resellerId = null;
-    long ownerUserId = 0;
-    if (token != null) {
-      var reseller = reseller(token, PESSIMISTIC_WRITE);
-      tenant = reseller.tenantId;
-      resellerId = reseller.id;
-    } else {
-      var business = Owners.tenant(subject);
-      tenant = business.id;
-      ownerUserId = business.ownerUserId;
-    }
-    var order = order(tenant, orderId, resellerId, PESSIMISTIC_WRITE);
-    String current = order.status;
-    Instant now = Times.now();
-    OrderRules.Status from = statusValue(current);
-    OrderRules.Status to = from;
-    if (target.equals("paid")) {
-      if (!current.equals("delivered") || order.paid)
-        throw new Problem(409, "Order is now " + current);
-      order.paid = true;
-      order.paidAt = now;
-    } else {
-      to = statusValue(target);
-      try {
-        OrderRules.transition(
-            from, to, token == null ? OrderRules.Actor.OWNER : OrderRules.Actor.RESELLER);
-      } catch (IllegalArgumentException e) {
-        throw new Problem(409, "Order is now " + current);
-      }
-      order.status = target;
-      switch (target) {
-        case "confirmed" -> order.confirmedAt = now;
-        case "cancelled" -> order.cancelledAt = now;
-        case "delivered" -> {
-          order.deliveredAt = now;
-          order.paid = paid;
-          order.paidAt = paid ? now : null;
-        }
-        default -> throw new Problem(409, "Invalid transition");
-      }
-    }
-    if (token == null) {
-      history.byOwner(order, from, to, ownerUserId, now);
-      SalesOrder.flush();
-      return ownerView(order);
-    }
-    history.byReseller(order, from, to, resellerId, now);
-    SalesOrder.flush();
-    return view(order);
-  }
-
-  @Transactional
   public Views.ProductionRun production(String subject, String date) {
     LocalDate delivery = date(date);
     long tenant = Owners.tenant(subject).id;
@@ -353,7 +298,7 @@ public class Orders {
     return new Views.ProductionRun(date, lines, unconfirmed);
   }
 
-  private static SalesOrder order(long tenant, long id, Long reseller, LockModeType lock) {
+  static SalesOrder order(long tenant, long id, Long reseller, LockModeType lock) {
     return SalesOrder.inTenant(tenant, id, reseller, lock)
         .orElseThrow(() -> new Problem(404, "Not found"));
   }
@@ -363,7 +308,7 @@ public class Orders {
   }
 
   /** An order as the owner sees it, with its history. */
-  private Views.Order ownerView(SalesOrder o) {
+  Views.Order ownerView(SalesOrder o) {
     return view(o, lines(o), history.forOwner(o));
   }
 

@@ -3,7 +3,6 @@ package ph.com.ridgewell.county.persistence;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.Instant;
 import java.util.List;
-import java.util.Locale;
 import ph.com.ridgewell.county.api.Views;
 import ph.com.ridgewell.county.domain.OrderRules;
 
@@ -45,15 +44,11 @@ public class OrderHistory {
     event.tenantId = order.tenantId;
     event.orderId = order.id;
     event.occurredAt = at;
-    event.fromStatus = stored(from);
-    event.toStatus = stored(to);
+    event.fromStatus = Stored.of(from);
+    event.toStatus = Stored.of(to);
     event.paid = order.paid;
-    event.actorType = stored(actor);
+    event.actorType = Stored.of(actor);
     return event;
-  }
-
-  private static String stored(Enum<?> value) {
-    return value.name().toLowerCase(Locale.ROOT);
   }
 
   /** The order's events, oldest first, as the owner sees them: with the actor's name. */

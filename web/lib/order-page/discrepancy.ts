@@ -11,8 +11,8 @@ import {
 } from "../discrepancy";
 import { resellerApi, type Fetch } from "./api";
 import { confirmResolvePage, reportFormPage, reportPage, type ReportFormState } from "./discrepancy-render";
-import { base, htmlResponse, inactive, orderId, PRICE_LIST_CACHE, redirect } from "./handlers";
 import { confirmationPage, unavailablePage } from "./render";
+import { base, htmlResponse, inactive, orderId, PRICE_LIST_CACHE, redirect } from "./response";
 
 const reportUrl = (token: string, id: number) => `${base(token)}/orders/${id}/discrepancy`;
 const noErrors = (): FormErrors => ({ lines: {} });

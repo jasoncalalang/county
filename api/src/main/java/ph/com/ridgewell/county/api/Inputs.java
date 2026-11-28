@@ -27,7 +27,13 @@ public final class Inputs {
 
   public record Line(
       @NotNull @Positive Long productId,
-      @NotNull @DecimalMin("0.001") @DecimalMax("9999") @Digits(integer = 4, fraction = 3)
+      @NotNull
+          @DecimalMin(value = "0.001", message = "Use at least 0.001")
+          @DecimalMax(value = "9999", message = "Use at most 9999")
+          @Digits(
+              integer = 4,
+              fraction = 3,
+              message = "Use up to 3 decimal places and no more than 9999")
           BigDecimal quantity) {}
 
   public record Place(

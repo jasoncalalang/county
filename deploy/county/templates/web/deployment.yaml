@@ -2,15 +2,58 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: county-web
+  labels:
+    {{- include "county.labels" (dict "root" . "component" "web") | nindent 4 }}
 spec:
+  replicas: {{ .Values.web.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
-      {{- include "county.selectorLabels" (dict "root" . "component" "web") | nindent 6 }}
+      {{- include "county.labels" (dict "root" . "component" "web") | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "county.selectorLabels" (dict "root" . "component" "web") | nindent 8 }}
+        {{- include "county.labels" (dict "root" . "component" "web") | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/web/configmap.yaml") . | sha256sum }}
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       containers:
         - name: web
           image: {{ include "county.image" (dict "root" . "name" "county-web") }}
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: county-web
+          env:
+            {{- include "county.secretEnv" (dict "name" "AUTH_SECRET" "secret" .Values.secrets.web "key" "AUTH_SECRET") | nindent 12 }}
+            {{- include "county.secretEnv" (dict "name" "AUTH_GOOGLE_ID" "secret" .Values.secrets.google "key" "GOOGLE_CLIENT_ID") | nindent 12 }}
+            {{- include "county.secretEnv" (dict "name" "AUTH_GOOGLE_SECRET" "secret" .Values.secrets.google "key" "GOOGLE_CLIENT_SECRET") | nindent 12 }}
+          startupProbe:
+            httpGet: {path: /healthz, port: 3000}
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: {path: /healthz, port: 3000}
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: {path: /healthz, port: 3000}
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+          securityContext:
+            {{- include "county.hardenedContainer" . | nindent 12 }}
+          volumeMounts:
+            - name: next-cache
+              mountPath: /app/.next/cache
+      volumes:
+        - name: next-cache
+          emptyDir: {}

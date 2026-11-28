@@ -2,15 +2,60 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: county-api
+  labels:
+    {{- include "county.labels" (dict "root" . "component" "api") | nindent 4 }}
 spec:
+  replicas: {{ .Values.api.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
-      {{- include "county.selectorLabels" (dict "root" . "component" "api") | nindent 6 }}
+      {{- include "county.labels" (dict "root" . "component" "api") | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "county.selectorLabels" (dict "root" . "component" "api") | nindent 8 }}
+        {{- include "county.labels" (dict "root" . "component" "api") | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/api/configmap.yaml") . | sha256sum }}
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 185
       containers:
         - name: api
           image: {{ include "county.image" (dict "root" . "name" "county-api") }}
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: county-api
+          env:
+            {{- include "county.secretEnv" (dict "name" "COUNTY_DB_PASSWORD" "secret" .Values.secrets.postgres "key" "POSTGRES_PASSWORD") | nindent 12 }}
+            {{- include "county.secretEnv" (dict "name" "GOOGLE_CLIENT_ID" "secret" .Values.secrets.google "key" "GOOGLE_CLIENT_ID") | nindent 12 }}
+          startupProbe:
+            httpGet: {path: /q/health/started, port: 8080}
+            periodSeconds: 5
+            failureThreshold: 12
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: {path: /q/health/live, port: 8080}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet: {path: /q/health/ready, port: 8080}
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext:
+            {{- include "county.hardenedContainer" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

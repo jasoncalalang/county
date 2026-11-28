@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: county-api
+  labels:
+    {{- include "county.labels" (dict "root" . "component" "api") | nindent 4 }}
+data:
+  COUNTY_JDBC_URL: jdbc:postgresql://county-postgres:5432/county
+  COUNTY_DB_USER: county
+  COUNTY_PUBLIC_URL: {{ include "county.publicUrl" . | quote }}
+  QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING: "true"
+  TZ: UTC

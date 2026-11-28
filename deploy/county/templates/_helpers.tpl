@@ -18,8 +18,28 @@
 {{- printf "%s/%s:%s" .root.Values.image.registry .name (include "county.tag" .root) -}}
 {{- end -}}
 
-{{- define "county.selectorLabels" -}}
+{{/* Labels that identify one component's pods. Selectors use exactly these. */}}
+{{- define "county.labels" -}}
 app.kubernetes.io/name: county
 app.kubernetes.io/instance: {{ .root.Release.Name }}
 app.kubernetes.io/component: {{ .component }}
+{{- end -}}
+
+{{/* An environment variable read from a key of an existing Secret. */}}
+{{- define "county.secretEnv" -}}
+- name: {{ .name }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .secret }}
+      key: {{ .key }}
+{{- end -}}
+
+{{/* Container security settings shared by api and web. */}}
+{{- define "county.hardenedContainer" -}}
+allowPrivilegeEscalation: false
+readOnlyRootFilesystem: true
+capabilities:
+  drop: ["ALL"]
+seccompProfile:
+  type: RuntimeDefault
 {{- end -}}

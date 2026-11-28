@@ -1,0 +1,9 @@
+# Build context for api/Dockerfile and web/Dockerfile (the repository root).
+.git
+**/.env*
+!**/.env.example
+**/node_modules
+**/build
+**/.gradle
+**/.next
+**/test-results

@@ -138,3 +138,48 @@ export interface Problem {
   detail?: string;
   errors?: Record<string, string>;
 }
+
+export type QuoteStatus = "draft" | "sent" | "accepted" | "declined" | "expired" | "cancelled";
+
+export interface QuoteLineView {
+  productId: number;
+  productName: string;
+  unit: Unit;
+  quantity: number;
+  price: number;
+  total: number;
+}
+
+export interface QuoteSummaryView {
+  id: number;
+  number: number;
+  resellerId: number;
+  resellerName: string;
+  createdAt: string;
+  /** Delivery date of an order placed when the quote was created: an estimate. */
+  deliveryDate: string;
+  /** Last day the reseller can accept. */
+  expiresOn: string;
+  /** A sent quote reads as expired once its last day has passed. */
+  status: QuoteStatus;
+  total: number;
+}
+
+export interface QuoteView extends QuoteSummaryView {
+  note: string;
+  /** The order that accepting this quote placed. */
+  acceptedOrderId: number | null;
+  sentAt: string | null;
+  acceptedAt: string | null;
+  declinedAt: string | null;
+  cancelledAt: string | null;
+  lines: QuoteLineView[];
+}
+
+export interface QuoteInput {
+  resellerId: number;
+  lines: { productId: number; quantity: number }[];
+  note?: string;
+  /** Last day the reseller can accept, `YYYY-MM-DD` in the business timezone. */
+  expiresOn: string;
+}

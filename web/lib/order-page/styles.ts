@@ -42,7 +42,10 @@ ul.recent form{margin-left:auto}
 .placed{color:var(--placed-ink);background:var(--placed-ground)}
 .confirmed{color:var(--confirmed-ink);background:var(--confirmed-ground)}
 .delivered{color:var(--delivered-ink);background:var(--delivered-ground)}
-.cancelled{color:var(--cancelled-ink);background:var(--cancelled-ground)}
+.cancelled,.declined,.expired,.draft{color:var(--cancelled-ink);background:var(--cancelled-ground)}
+.sent{color:var(--confirmed-ink);background:var(--confirmed-ground)}
+.accepted{color:var(--delivered-ink);background:var(--delivered-ground)}
+.actions{display:flex;flex-direction:column;gap:8px;margin:16px 0}
 table{width:100%;border-collapse:collapse;margin:12px 0}
 th{font-size:13px;line-height:16px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding:8px 4px;border-bottom:1px solid var(--border)}
 td{padding:8px 4px;border-bottom:1px solid var(--border);vertical-align:top}

@@ -1,5 +1,5 @@
 // Server-side calls from the web pod to the API with the reseller's token (ADR 0010).
-import type { CatalogView, OrderView, Problem } from "../api-types";
+import type { CatalogView, OrderView, Problem, QuoteSummaryView, QuoteView } from "../api-types";
 
 export type Fetch = typeof fetch;
 
@@ -29,4 +29,15 @@ export const resellerApi = (fetchImpl: Fetch = fetch) => ({
     call<OrderView>(fetchImpl, `${tokenPath(token)}/orders`, { method: "POST", body: JSON.stringify(body) }),
   cancel: (token: string, id: number) =>
     call<OrderView>(fetchImpl, `${tokenPath(token)}/orders/${id}/cancel`, { method: "POST" }),
+  /** Sent quotes the reseller can still accept, newest first. */
+  quotes: (token: string) => call<QuoteSummaryView[]>(fetchImpl, `${tokenPath(token)}/quotes`),
+  quote: (token: string, id: number) => call<QuoteView>(fetchImpl, `${tokenPath(token)}/quotes/${id}`),
+  /** 201 with the new order, or 200 with the order the quote already placed. */
+  accept: (token: string, id: number, idempotencyKey: string) =>
+    call<OrderView>(fetchImpl, `${tokenPath(token)}/quotes/${id}/accept`, {
+      method: "POST",
+      body: JSON.stringify({ idempotencyKey }),
+    }),
+  decline: (token: string, id: number) =>
+    call<QuoteView>(fetchImpl, `${tokenPath(token)}/quotes/${id}/decline`, { method: "POST" }),
 });

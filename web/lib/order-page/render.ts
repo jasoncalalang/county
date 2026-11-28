@@ -1,13 +1,14 @@
 // The reseller's pages (interface design, section 7). Every page is a full HTML document with
 // the stylesheet and the optional script inlined; every action is a link or a form post.
-import type { CatalogView, OrderView, QuoteStatus, QuoteSummaryView, QuoteView } from "../api-types";
+import type { CatalogView, DiscrepancyView, OrderView, QuoteStatus, QuoteSummaryView, QuoteView } from "../api-types";
+import { DISCREPANCY_STATUS_LABEL } from "../discrepancy";
 import { formatClock, formatMoney, formatShortDate, QUOTE_STATUS_LABEL, quoteNumber, STATUS_LABEL, type Status } from "../format";
 import { quantityAttrs } from "../quantity";
 import { html, raw, type Html } from "./html";
 import { ORDER_PAGE_SCRIPT } from "./script";
 import { ORDER_PAGE_CSS } from "./styles";
 
-function page(title: string, body: Html, withScript = true): string {
+export function page(title: string, body: Html, withScript = true): string {
   return `<!doctype html>${html`<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"><title>${title}</title><style>${raw(ORDER_PAGE_CSS)}</style></head><body>${body}${withScript ? html`<script>${raw(ORDER_PAGE_SCRIPT)}</script>` : ""}</body></html>`}`;
 }
 
@@ -23,7 +24,7 @@ function quotePath(token: string, id: number): string {
   return `${orderPath(token)}/quotes/${id}`;
 }
 
-function orderPath(token: string, id?: number): string {
+export function orderPath(token: string, id?: number): string {
   const base = `/order/${encodeURIComponent(token)}`;
   return id === undefined ? base : `${base}/orders/${id}`;
 }
@@ -97,8 +98,27 @@ ${offers}${errors}${form}${recent}`,
   );
 }
 
-/** 7.3 confirmation. `notice` replaces the "what happens next" line, e.g. after a refused cancel. */
-export function confirmationPage(token: string, order: OrderView, notice?: string): string {
+function reportPath(token: string, orderId: number): string {
+  return `${orderPath(token, orderId)}/discrepancy`;
+}
+
+export function reportBadge(status: DiscrepancyView["status"]): Html {
+  return html`<span class="badge ${status}">${DISCREPANCY_STATUS_LABEL[status]}</span>`;
+}
+
+/** What a delivered order's page says about its report: an offer to file one, or its status. */
+function reportSection(token: string, order: OrderView, report: DiscrepancyView | null): Html {
+  return report
+    ? html`<p>Delivery report ${reportBadge(report.status)} <a href="${reportPath(token, order.id)}">View report</a></p>`
+    : html`<p><a href="${reportPath(token, order.id)}">Report a problem with this delivery</a></p>`;
+}
+
+/**
+ * 7.3 confirmation. `notice` replaces the "what happens next" line, e.g. after a refused cancel.
+ * `report` is the order's short-delivery report: null when there is none, undefined when it
+ * could not be read, which leaves the section out.
+ */
+export function confirmationPage(token: string, order: OrderView, notice?: string, report?: DiscrepancyView | null): string {
   const heading =
     order.status === "cancelled" ? `Order #${order.number} cancelled` : `Order #${order.number} placed`;
   const placed = order.status === "placed";
@@ -115,6 +135,7 @@ export function confirmationPage(token: string, order: OrderView, notice?: strin
 <tfoot><tr><td colspan="2">Total</td><td class="r">${formatMoney(order.total)}</td></tr></tfoot></table>
 ${order.note ? html`<p class="small">Your note</p><blockquote>${order.note}</blockquote>` : ""}
 ${placed ? html`<p class="small">Your supplier will confirm this order. You can cancel it until then.</p>` : ""}
+${order.status === "delivered" && report !== undefined ? reportSection(token, order, report) : ""}
 </div>
 <a class="back" href="${orderPath(token)}">← Back to price list</a>
 ${placed ? cancelForm(token, order, "order") : ""}`,

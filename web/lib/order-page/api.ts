@@ -1,5 +1,5 @@
 // Server-side calls from the web pod to the API with the reseller's token (ADR 0010).
-import type { CatalogView, OrderView, Problem, QuoteSummaryView, QuoteView } from "../api-types";
+import type { CatalogView, DiscrepancyInput, DiscrepancyView, OrderView, Problem, QuoteSummaryView, QuoteView } from "../api-types";
 
 export type Fetch = typeof fetch;
 
@@ -40,4 +40,14 @@ export const resellerApi = (fetchImpl: Fetch = fetch) => ({
     }),
   decline: (token: string, id: number) =>
     call<QuoteView>(fetchImpl, `${tokenPath(token)}/quotes/${id}/decline`, { method: "POST" }),
+  /** The order's short-delivery report; 404 when there is none. */
+  report: (token: string, id: number) => call<DiscrepancyView>(fetchImpl, `${tokenPath(token)}/orders/${id}/discrepancy`),
+  /** 201 with the new report, or 200 with the one the same key already filed. */
+  fileReport: (token: string, id: number, body: DiscrepancyInput) =>
+    call<DiscrepancyView>(fetchImpl, `${tokenPath(token)}/orders/${id}/discrepancy`, { method: "POST", body: JSON.stringify(body) }),
+  /** The body is always sent: the API refuses a resolve with no JSON content type. */
+  approveReport: (token: string, id: number, body: { note?: string }) =>
+    call<DiscrepancyView>(fetchImpl, `${tokenPath(token)}/orders/${id}/discrepancy/approve`, { method: "POST", body: JSON.stringify(body) }),
+  declineReport: (token: string, id: number, body: { note?: string }) =>
+    call<DiscrepancyView>(fetchImpl, `${tokenPath(token)}/orders/${id}/discrepancy/decline`, { method: "POST", body: JSON.stringify(body) }),
 });

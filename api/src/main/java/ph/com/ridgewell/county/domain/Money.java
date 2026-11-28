@@ -9,6 +9,10 @@ public final class Money {
 
   private Money() {}
 
+  public static BigDecimal line(BigDecimal price, BigDecimal quantity) {
+    throw new UnsupportedOperationException();
+  }
+
   public static BigDecimal line(BigDecimal price, int quantity) {
     if (price == null
         || price.signum() <= 0

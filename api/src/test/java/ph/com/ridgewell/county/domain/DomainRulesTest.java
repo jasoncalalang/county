@@ -187,4 +187,50 @@ class DomainRulesTest {
       assertThrows(IllegalArgumentException.class, () -> Money.line(BigDecimal.ONE, qty));
     assertThrows(IllegalArgumentException.class, () -> Money.line(null, 1));
   }
+
+  @Test
+  void fractionalQuantitiesRoundHalfUpToCentavos() {
+    assertEquals(new BigDecimal("180.00"), Money.line(new BigDecimal("120.00"), new BigDecimal("1.5")));
+    assertEquals(new BigDecimal("39.96"), Money.line(new BigDecimal("120.00"), new BigDecimal("0.333")));
+    // 99.99 x 0.333 = 33.29667: more than half a centavo over 33.29.
+    assertEquals(new BigDecimal("33.30"), Money.line(new BigDecimal("99.99"), new BigDecimal("0.333")));
+    // 0.01 x 0.5 = 0.005: exactly half rounds up.
+    assertEquals(new BigDecimal("0.01"), Money.line(new BigDecimal("0.01"), new BigDecimal("0.5")));
+    assertEquals(new BigDecimal("1200.00"), Money.line(new BigDecimal("120"), new BigDecimal("10.000")));
+  }
+
+  @Test
+  void rejectsFractionalQuantitiesOutsideTheRule() {
+    BigDecimal price = new BigDecimal("120.00");
+    for (String quantity :
+        new String[] {
+          "0", "-1", "-0.001", "9999.001", "10000", "1.0005", "1e400", "1e-400", "1E+5"
+        })
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> Money.line(price, new BigDecimal(quantity)),
+          quantity);
+    assertThrows(IllegalArgumentException.class, () -> Money.line(price, (BigDecimal) null));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> Money.line(new BigDecimal("1.005"), new BigDecimal("1.5")),
+        "a price is never rounded");
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> Money.line(new BigDecimal("9999999999.99"), new BigDecimal("1.5")),
+        "total above the ceiling");
+    assertEquals(
+        new BigDecimal("1199880.00"), Money.line(new BigDecimal("120.00"), new BigDecimal("9999")));
+  }
+
+  @Test
+  void refusesALineThatRoundsBelowOneCentavo() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> Money.line(new BigDecimal("1.00"), new BigDecimal("0.004")));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> Money.line(new BigDecimal("0.01"), new BigDecimal("0.001")));
+    assertEquals(new BigDecimal("0.01"), Money.line(new BigDecimal("1.00"), new BigDecimal("0.005")));
+  }
 }

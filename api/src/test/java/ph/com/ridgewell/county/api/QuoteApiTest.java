@@ -725,6 +725,38 @@ class QuoteApiTest {
   }
 
   @Test
+  @TestSecurity(user = "quote-bad-quantity", roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "quote-bad-quantity")})
+  void aFractionOfAPackAndALineUnderOneCentavoAreRefusedOnAQuote() {
+    var s = shop("09171230011");
+    long salt =
+        given()
+            .basePath("")
+            .contentType("application/json")
+            .body("{\"name\":\"Salt\",\"unit\":\"kg\",\"price\":1.00}")
+            .post("/api/products")
+            .then()
+            .statusCode(201)
+            .extract()
+            .jsonPath()
+            .getLong("id");
+    for (String lines :
+        new String[] {
+          "[{\"productId\":" + s.product() + ",\"quantity\":1.5}]",
+          "[{\"productId\":" + salt + ",\"quantity\":0.004}]"
+        })
+      given()
+          .basePath("")
+          .contentType("application/json")
+          .body(quoteBody(s.reseller(), lines, today().plusDays(7)))
+          .post("/api/quotes")
+          .then()
+          .statusCode(422)
+          .body("errors", hasKey("lines[0].quantity"));
+    given().basePath("").get("/api/quotes").then().body("$", empty());
+  }
+
+  @Test
   void quoteEndpointsRequireAuthentication() {
     given().basePath("").get("/api/quotes").then().statusCode(401);
     given().basePath("").contentType("application/json").body("{}").post("/api/quotes").then().statusCode(401);

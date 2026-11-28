@@ -39,8 +39,4 @@ public final class Money {
       throw new IllegalArgumentException("Line total is too large");
     return total;
   }
-
-  public static BigDecimal line(BigDecimal price, int quantity) {
-    return line(price, BigDecimal.valueOf(quantity));
-  }
 }

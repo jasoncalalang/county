@@ -164,11 +164,11 @@ class DomainRulesTest {
 
   @Test
   void moneyUsesExactCentavosAndBounds() {
-    assertEquals(new BigDecimal("1200.00"), Money.line(new BigDecimal("120"), 10));
-    assertEquals(new BigDecimal("0.30"), Money.line(new BigDecimal("0.10"), 3));
-    assertEquals(new BigDecimal("3.60"), Money.line(new BigDecimal("1.200"), 3));
-    assertEquals(new BigDecimal("99.99"), Money.line(new BigDecimal("0.01"), 9999));
-    assertEquals(new BigDecimal("9999999999.99"), Money.line(new BigDecimal("9999999999.99"), 1));
+    assertEquals(new BigDecimal("1200.00"), Money.line(new BigDecimal("120"), new BigDecimal("10")));
+    assertEquals(new BigDecimal("0.30"), Money.line(new BigDecimal("0.10"), new BigDecimal("3")));
+    assertEquals(new BigDecimal("3.60"), Money.line(new BigDecimal("1.200"), new BigDecimal("3")));
+    assertEquals(new BigDecimal("99.99"), Money.line(new BigDecimal("0.01"), new BigDecimal("9999")));
+    assertEquals(new BigDecimal("9999999999.99"), Money.line(new BigDecimal("9999999999.99"), new BigDecimal("1")));
   }
 
   @Test
@@ -179,13 +179,13 @@ class DomainRulesTest {
             new BigDecimal("-1"),
             new BigDecimal("0.001"),
             new BigDecimal("10000000000"))) {
-      assertThrows(IllegalArgumentException.class, () -> Money.line(value, 1));
+      assertThrows(IllegalArgumentException.class, () -> Money.line(value, BigDecimal.ONE));
     }
     assertThrows(
-        IllegalArgumentException.class, () -> Money.line(new BigDecimal("9999999999.99"), 2));
+        IllegalArgumentException.class, () -> Money.line(new BigDecimal("9999999999.99"), new BigDecimal("2")));
     for (int qty : new int[] {-1, 0, 10000, Integer.MAX_VALUE})
-      assertThrows(IllegalArgumentException.class, () -> Money.line(BigDecimal.ONE, qty));
-    assertThrows(IllegalArgumentException.class, () -> Money.line(null, 1));
+      assertThrows(IllegalArgumentException.class, () -> Money.line(BigDecimal.ONE, BigDecimal.valueOf(qty)));
+    assertThrows(IllegalArgumentException.class, () -> Money.line(null, BigDecimal.ONE));
   }
 
   @Test

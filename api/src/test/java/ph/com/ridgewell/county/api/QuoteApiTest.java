@@ -705,6 +705,26 @@ class QuoteApiTest {
   }
 
   @Test
+  @TestSecurity(user = "quote-fourth-decimal", roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "quote-fourth-decimal")})
+  void aFourthDecimalOnAQuoteIsRefusedInPlainWords() {
+    var s = shop("09171230010");
+    for (String quantity : new String[] {"1.5000", "1.0005"})
+      given()
+          .basePath("")
+          .contentType("application/json")
+          .body(
+              quoteBody(
+                  s.reseller(),
+                  "[{\"productId\":" + s.product() + ",\"quantity\":" + quantity + "}]",
+                  today().plusDays(7)))
+          .post("/api/quotes")
+          .then()
+          .statusCode(422)
+          .body("errors.'lines[0].quantity'", is("Use up to 3 decimal places and no more than 9999"));
+  }
+
+  @Test
   void quoteEndpointsRequireAuthentication() {
     given().basePath("").get("/api/quotes").then().statusCode(401);
     given().basePath("").contentType("application/json").body("{}").post("/api/quotes").then().statusCode(401);

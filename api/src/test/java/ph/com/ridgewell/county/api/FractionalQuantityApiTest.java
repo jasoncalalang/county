@@ -99,6 +99,22 @@ class FractionalQuantityApiTest {
   }
 
   @Test
+  @TestSecurity(user = "fraction-words", roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "fraction-words")})
+  void quantityRefusalsUsePlainWords() {
+    var s = shop("09171230108");
+    String decimals = "Use up to 3 decimal places and no more than 9999";
+    for (String quantity : new String[] {"1.5000", "9999.0000", "1.0005"})
+      refused(place(s, line(s.rice(), quantity)), "lines[0].quantity")
+          .body("errors.'lines[0].quantity'", is(decimals));
+    for (String quantity : new String[] {"0", "-1"})
+      refused(place(s, line(s.rice(), quantity)), "lines[0].quantity")
+          .body("errors.'lines[0].quantity'", is("Use at least 0.001"));
+    refused(place(s, line(s.rice(), "9999.001")), "lines[0].quantity")
+        .body("errors.'lines[0].quantity'", is("Use at most 9999"));
+  }
+
+  @Test
   @TestSecurity(user = "fraction-exponent", roles = {"user"})
   @OidcSecurity(claims = {@Claim(key = "sub", value = "fraction-exponent")})
   void hugeExponentsAreRefusedNotAnError() {

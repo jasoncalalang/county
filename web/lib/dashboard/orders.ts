@@ -1,5 +1,5 @@
 // Pure helpers for the dashboard's order screens, kept apart so they can be tested.
-import type { OrderItemView, OrderSummaryView } from "../api-types";
+import type { OrderItemView, OrderSummaryView, OrderView } from "../api-types";
 import { formatMoney, manilaDate, type Status } from "../format";
 
 const RANK: Record<Status, number> = { placed: 0, confirmed: 1, delivered: 2, cancelled: 3 };
@@ -74,4 +74,22 @@ export function previewQuery(cutoff: string, deliveryDays: number[]): string {
   const query = new URLSearchParams({ cutoff: cutoff.slice(0, 5) });
   for (const day of deliveryDays) query.append("deliveryDays", String(day));
   return query.toString();
+}
+
+export interface HistoryEntry {
+  label: string;
+  at: string;
+  /** Who did it, when the API says. */
+  by: string | null;
+}
+
+export type HistorySource = Pick<
+  OrderView,
+  "placedAt" | "resellerName" | "confirmedAt" | "deliveredAt" | "cancelledAt" | "paidAt" | "events"
+>;
+
+/** The order's history for its detail page, oldest first. */
+export function orderHistory(order: HistorySource): HistoryEntry[] {
+  void order;
+  return [];
 }

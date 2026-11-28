@@ -31,6 +31,7 @@ const order: OrderView = {
   deliveredAt: null,
   cancelledAt: null,
   paidAt: null,
+  events: [],
   lines: [
     { productId: 1, productName: "Longganisa Hamonado", unit: "pack", quantity: 10, price: 120, total: 1200 },
     { productId: 3, productName: "Tocino", unit: "kg", quantity: 5, price: 320, total: 1600 },

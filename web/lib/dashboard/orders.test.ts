@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
+import type { OrderEventView } from "../api-types";
 import {
   countByStatus,
   defaultDeliveryDate,
   itemsSummary,
+  orderHistory,
   previewQuery,
   sortOrders,
   stepDeliveryDay,
@@ -64,5 +66,92 @@ describe("orders list", () => {
 
   test("the preview query repeats deliveryDays and trims seconds from the cut-off", () => {
     expect(previewQuery("16:00:00", [1, 4])).toBe("cutoff=16%3A00&deliveryDays=1&deliveryDays=4");
+  });
+});
+
+const placed = {
+  placedAt: "2026-11-26T02:00:00Z",
+  resellerName: "Aling Rosa",
+  confirmedAt: null,
+  deliveredAt: null,
+  cancelledAt: null,
+  paidAt: null,
+};
+
+const event = (
+  at: string,
+  fromStatus: OrderEventView["fromStatus"],
+  toStatus: OrderEventView["toStatus"],
+  paid: boolean,
+  actorType: OrderEventView["actorType"] = "owner",
+  actorName: string | null = "Nena Santos",
+): OrderEventView => ({ at, fromStatus, toStatus, paid, actorType, actorName });
+
+describe("order history", () => {
+  test("lists the placement, then each event with its label and who did it", () => {
+    const events = [
+      event("2026-11-26T03:00:00Z", "placed", "confirmed", false),
+      event("2026-11-27T03:00:00Z", "confirmed", "delivered", false),
+      event("2026-11-28T03:00:00Z", "delivered", "delivered", true),
+    ];
+
+    expect(orderHistory({ ...placed, events })).toEqual([
+      { label: "Placed", at: "2026-11-26T02:00:00Z", by: "Aling Rosa" },
+      { label: "Confirmed", at: "2026-11-26T03:00:00Z", by: "Nena Santos" },
+      { label: "Delivered", at: "2026-11-27T03:00:00Z", by: "Nena Santos" },
+      { label: "Marked paid", at: "2026-11-28T03:00:00Z", by: "Nena Santos" },
+    ]);
+  });
+
+  test("delivering as paid is one entry", () => {
+    const events = [
+      event("2026-11-26T03:00:00Z", "placed", "confirmed", false),
+      event("2026-11-27T03:00:00Z", "confirmed", "delivered", true),
+    ];
+
+    expect(orderHistory({ ...placed, events }).map((e) => e.label)).toEqual([
+      "Placed",
+      "Confirmed",
+      "Delivered and paid",
+    ]);
+  });
+
+  test("a cancellation names whoever did it, the reseller or the owner", () => {
+    const byReseller = [event("2026-11-26T03:00:00Z", "placed", "cancelled", false, "reseller", "Aling Rosa")];
+    const byOwner = [event("2026-11-26T03:00:00Z", "confirmed", "cancelled", false)];
+
+    expect(orderHistory({ ...placed, events: byReseller }).at(-1)).toEqual({
+      label: "Cancelled",
+      at: "2026-11-26T03:00:00Z",
+      by: "Aling Rosa",
+    });
+    expect(orderHistory({ ...placed, events: byOwner }).at(-1)?.by).toBe("Nena Santos");
+  });
+
+  test("an owner with no display name reads Owner", () => {
+    const events = [event("2026-11-26T03:00:00Z", "placed", "confirmed", false, "owner", null)];
+
+    expect(orderHistory({ ...placed, events }).at(-1)?.by).toBe("Owner");
+  });
+
+  test("without events, it falls back to the order's timestamps and names no one", () => {
+    const order = {
+      ...placed,
+      confirmedAt: "2026-11-26T03:00:00Z",
+      deliveredAt: "2026-11-27T03:00:00Z",
+      paidAt: "2026-11-28T03:00:00Z",
+      events: [],
+    };
+
+    expect(orderHistory(order)).toEqual([
+      { label: "Placed", at: "2026-11-26T02:00:00Z", by: null },
+      { label: "Confirmed", at: "2026-11-26T03:00:00Z", by: null },
+      { label: "Delivered", at: "2026-11-27T03:00:00Z", by: null },
+      { label: "Paid", at: "2026-11-28T03:00:00Z", by: null },
+    ]);
+    expect(orderHistory({ ...placed, cancelledAt: "2026-11-26T04:00:00Z", events: [] }).map((e) => e.label)).toEqual([
+      "Placed",
+      "Cancelled",
+    ]);
   });
 });

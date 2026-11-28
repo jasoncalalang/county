@@ -77,12 +77,25 @@ export interface OrderLineView {
   total: number;
 }
 
+export interface OrderEventView {
+  at: string;
+  fromStatus: Status;
+  toStatus: Status;
+  /** The order's paid flag after the event. */
+  paid: boolean;
+  actorType: "owner" | "reseller";
+  /** The owner's display name, a reseller's name, or the business name on a reseller's link. */
+  actorName: string | null;
+}
+
 export interface OrderView extends Omit<OrderSummaryView, "items"> {
   confirmedAt: string | null;
   deliveredAt: string | null;
   cancelledAt: string | null;
   paidAt: string | null;
   lines: OrderLineView[];
+  /** What was done to the order, oldest first; empty for orders changed before history began. */
+  events: OrderEventView[];
 }
 
 export interface CatalogProductView {

@@ -23,6 +23,8 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 class OrderHistoryApiTest {
   private static final String OWNER_NAME = "Nena Santos";
+  private static final String OWNER_EMAIL = "nena.santos@example.com";
+  private static final String BUSINESS_NAME = "Fixture business";
 
   @Inject AgroalDataSource dataSource;
 
@@ -34,7 +36,12 @@ class OrderHistoryApiTest {
       long tenant = TestOwners.createBusiness(c, subject);
       long owner =
           TestSql.id(TestSql.one(c, "SELECT owner_user_id AS id FROM business WHERE id=?", tenant));
-      TestSql.execute(c, "UPDATE app_user SET display_name=? WHERE id=?", OWNER_NAME, owner);
+      TestSql.execute(
+          c,
+          "UPDATE app_user SET display_name=?, email=? WHERE id=?",
+          OWNER_NAME,
+          OWNER_EMAIL,
+          owner);
       long product =
           TestSql.id(
               TestSql.one(
@@ -56,6 +63,10 @@ class OrderHistoryApiTest {
   }
 
   private long place(Shop s) {
+    return place(s, UUID.randomUUID());
+  }
+
+  private long place(Shop s, UUID key) {
     return given()
         .basePath("")
         .contentType("application/json")
@@ -63,7 +74,7 @@ class OrderHistoryApiTest {
             "{\"lines\":[{\"productId\":"
                 + s.product
                 + ",\"quantity\":1}],\"idempotencyKey\":\""
-                + UUID.randomUUID()
+                + key
                 + "\"}")
         .post("/api/order/" + s.token + "/orders")
         .then()
@@ -287,5 +298,81 @@ class OrderHistoryApiTest {
     var row = rows(s.tenant, id).getLast();
     assertEquals(s.ownerUser, ((Number) row.get("actor_user_id")).longValue());
     assertNull(row.get("actor_reseller_id"));
+  }
+
+  private io.restassured.response.Response asReseller(Shop s, long id) {
+    return given().basePath("").get("/api/order/" + s.token + "/orders/" + id);
+  }
+
+  /** Nothing in the link holder's view names the owner or carries an internal id. */
+  private void assertNoPersonalData(String body) {
+    assertFalse(body.contains(OWNER_NAME), body);
+    assertFalse(body.contains(OWNER_EMAIL), body);
+    assertFalse(body.contains("actorUserId"), body);
+    assertFalse(body.contains("actorResellerId"), body);
+  }
+
+  @Test
+  @TestSecurity(
+      user = "history-reseller-view",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "history-reseller-view")})
+  void resellerSeesTheBusinessNameInPlaceOfTheOwner() throws SQLException {
+    Shop s = shop("history-reseller-view");
+    long id = place(s);
+    owner(id, "confirm");
+    deliver(id, "{\"paid\":false}");
+
+    var response = asReseller(s, id);
+    response.then().statusCode(200);
+    var view = response.jsonPath();
+    assertEquals(2, view.getList("events").size());
+    assertEquals(List.of("owner", "owner"), view.getList("events.actorType"));
+    assertEquals(List.of(BUSINESS_NAME, BUSINESS_NAME), view.getList("events.actorName"));
+    assertEquals(List.of("confirmed", "delivered"), view.getList("events.toStatus"));
+    assertNoPersonalData(response.asString());
+
+    // The reseller's own cancellation shows their name, and its response is clean too.
+    long cancelled = place(s);
+    var cancel =
+        given().basePath("").post("/api/order/" + s.token + "/orders/" + cancelled + "/cancel");
+    cancel.then().statusCode(200);
+    assertEquals(List.of("reseller"), cancel.jsonPath().getList("events.actorType"));
+    assertEquals(List.of("Rosa"), cancel.jsonPath().getList("events.actorName"));
+    assertNoPersonalData(cancel.asString());
+
+    // The owner's own view has the names but no ids either.
+    var ownerView = given().basePath("").get("/api/orders/" + id);
+    assertEquals(List.of(OWNER_NAME, OWNER_NAME), ownerView.jsonPath().getList("events.actorName"));
+    assertFalse(ownerView.asString().contains("actorUserId"));
+    assertFalse(ownerView.asString().contains("actorResellerId"));
+  }
+
+  @Test
+  @TestSecurity(
+      user = "history-replay",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "history-replay")})
+  void replayedPlacementShowsTheResellersViewOfTheHistory() throws SQLException {
+    Shop s = shop("history-replay");
+    UUID key = UUID.randomUUID();
+    long id = place(s, key);
+    owner(id, "confirm");
+
+    var replay =
+        given()
+            .basePath("")
+            .contentType("application/json")
+            .body(
+                "{\"lines\":[{\"productId\":"
+                    + s.product
+                    + ",\"quantity\":1}],\"idempotencyKey\":\""
+                    + key
+                    + "\"}")
+            .post("/api/order/" + s.token + "/orders");
+    replay.then().statusCode(200);
+    assertEquals(List.of("confirmed"), replay.jsonPath().getList("events.toStatus"));
+    assertEquals(List.of(BUSINESS_NAME), replay.jsonPath().getList("events.actorName"));
+    assertNoPersonalData(replay.asString());
   }
 }

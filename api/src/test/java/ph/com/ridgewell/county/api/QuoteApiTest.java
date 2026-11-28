@@ -244,6 +244,29 @@ class QuoteApiTest {
   }
 
   @Test
+  @TestSecurity(user = "quote-replay-events", roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "quote-replay-events")})
+  void replayedAcceptanceShowsTheResellersViewOfTheOrderHistory() {
+    var s = shop("09171230012");
+    long id = sentQuote(s);
+    long order =
+        accept(s.token(), id, UUID.randomUUID())
+            .then()
+            .statusCode(201)
+            .extract()
+            .jsonPath()
+            .getLong("id");
+    given().basePath("").post("/api/orders/" + order + "/confirm").then().statusCode(200);
+
+    var replay = accept(s.token(), id, UUID.randomUUID());
+    replay.then().statusCode(200);
+    org.junit.jupiter.api.Assertions.assertEquals(
+        java.util.List.of("confirmed"), replay.jsonPath().getList("events.toStatus"));
+    org.junit.jupiter.api.Assertions.assertEquals(
+        java.util.List.of("Fixture business"), replay.jsonPath().getList("events.actorName"));
+  }
+
+  @Test
   @TestSecurity(user = "quote-key", roles = {"user"})
   @OidcSecurity(claims = {@Claim(key = "sub", value = "quote-key")})
   void aKeyAlreadySpentOnAnOrderIsRefused() {

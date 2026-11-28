@@ -84,7 +84,7 @@ class ConcurrentOrderingTest {
     try (Connection c = source.getConnection();
         var s =
             c.prepareStatement(
-                "SELECT count(*),max(number) FROM purchase_order WHERE tenant_id=?")) {
+                "SELECT count(*),max(number) FROM sales_order WHERE tenant_id=?")) {
       s.setLong(1, tenant);
       try (var rs = s.executeQuery()) {
         assertTrue(rs.next());

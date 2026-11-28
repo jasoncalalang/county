@@ -66,7 +66,20 @@ public final class Inputs {
 
   public record AcceptQuote(@NotNull UUID idempotencyKey) {}
 
-  public record DiscrepancyLine(Long productId, BigDecimal receivedQuantity) {}
+  /** What was received of one product; the ordered quantity and the price come from the order. */
+  public record DiscrepancyLine(
+      @NotNull @Positive Long productId,
+      @NotNull
+          @DecimalMin(value = "0", message = "Use 0 or more")
+          @DecimalMax(value = "9999", message = "Use at most 9999")
+          @Digits(
+              integer = 4,
+              fraction = 3,
+              message = "Use up to 3 decimal places and no more than 9999")
+          BigDecimal receivedQuantity) {}
 
-  public record Discrepancy(List<DiscrepancyLine> lines, String note, UUID idempotencyKey) {}
+  public record Discrepancy(
+      @NotEmpty @Size(max = 50) List<@NotNull @Valid DiscrepancyLine> lines,
+      @Size(max = 500) String note,
+      @NotNull UUID idempotencyKey) {}
 }

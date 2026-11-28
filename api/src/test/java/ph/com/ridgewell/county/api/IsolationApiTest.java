@@ -189,6 +189,86 @@ class IsolationApiTest {
     given().basePath("").get("/api/order/" + replacement).then().statusCode(200);
   }
 
+  private int cancelByReseller(Fixture f, long order) {
+    return given()
+        .basePath("")
+        .post("/api/order/" + f.token + "/orders/" + order + "/cancel")
+        .then()
+        .extract()
+        .statusCode();
+  }
+
+  @Test
+  @TestSecurity(
+      user = "isolation-history-b",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "isolation-history-b")})
+  void anotherTenantsOwnerCannotReadOrderHistory() throws SQLException {
+    Fixture b = fixture("isolation-history-b");
+    Fixture a = fixture("history-a-" + UUID.randomUUID());
+    long orderA = place(a, UUID.randomUUID().toString());
+    assertEquals(200, cancelByReseller(a, orderA));
+    // A's order has its event, read through A's link.
+    given()
+        .basePath("")
+        .get("/api/order/" + a.token + "/orders/" + orderA)
+        .then()
+        .statusCode(200)
+        .body("events", hasSize(1));
+
+    given().basePath("").get("/api/orders/" + orderA).then().statusCode(404);
+
+    // B's own order carries only B's event, none of A's.
+    long orderB = place(b, UUID.randomUUID().toString());
+    assertEquals(200, cancelByReseller(b, orderB));
+    given()
+        .basePath("")
+        .get("/api/orders/" + orderB)
+        .then()
+        .statusCode(200)
+        .body("events", hasSize(1));
+    try (var c = dataSource.getConnection()) {
+      assertEquals(
+          1L,
+          TestSql.one(c, "SELECT count(*) AS n FROM order_event WHERE tenant_id=?", b.tenant)
+              .get("n"));
+    }
+  }
+
+  @Test
+  void anotherResellersLinkCannotReadOrderHistory() throws SQLException {
+    Fixture f = fixture("history-reseller-" + UUID.randomUUID());
+    String otherToken = UUID.randomUUID().toString().replace("-", "").substring(0, 22);
+    try (var c = dataSource.getConnection()) {
+      insert(
+          c,
+          "INSERT INTO reseller(tenant_id,name,mobile,token) VALUES (?, 'Ben', '+639171234568',?)"
+              + " RETURNING id",
+          f.tenant,
+          otherToken);
+    }
+    long order = place(f, UUID.randomUUID().toString());
+    assertEquals(200, cancelByReseller(f, order));
+    given()
+        .basePath("")
+        .get("/api/order/" + f.token + "/orders/" + order)
+        .then()
+        .statusCode(200)
+        .body("events", hasSize(1));
+
+    given().basePath("").get("/api/order/" + otherToken + "/orders/" + order).then().statusCode(404);
+    given()
+        .basePath("")
+        .post("/api/order/" + otherToken + "/orders/" + order + "/cancel")
+        .then()
+        .statusCode(404);
+    given()
+        .basePath("")
+        .get("/api/order/" + f.token + "/orders/" + order)
+        .then()
+        .body("events", hasSize(1));
+  }
+
   private void assertTokenDead(String token, long product, String key, long order) {
     given().basePath("").get("/api/order/" + token).then().statusCode(404);
     given().basePath("").get("/api/order/" + token + "/orders/" + order).then().statusCode(404);

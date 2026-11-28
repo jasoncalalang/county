@@ -122,6 +122,37 @@ components:
           anyOf:
           - $ref: "#/components/schemas/BusinessView"
           - type: "null"
+    OrderEventView:
+      type: object
+      properties:
+        at:
+          type: string
+          format: date-time
+        fromStatus:
+          type: string
+          enum:
+          - placed
+          - confirmed
+          - delivered
+          - cancelled
+        toStatus:
+          type: string
+          enum:
+          - placed
+          - confirmed
+          - delivered
+          - cancelled
+        paid:
+          type: boolean
+        actorType:
+          type: string
+          enum:
+          - owner
+          - reseller
+        actorName:
+          type:
+          - string
+          - "null"
     OrderItemView:
       description: "One line of an order, as the order list shows it"
       type: object
@@ -249,6 +280,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/OrderLineView"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderEventView"
+          description: "What was done to the order, oldest first"
     Place:
       type: object
       required:
@@ -651,6 +687,8 @@ components:
     SecurityScheme:
       type: openIdConnect
       description: Authentication
+tags:
+- name: Owner Resource
 paths:
   /api/me:
     get:
@@ -876,6 +914,8 @@ paths:
       - Reseller Resource
   /api/orders:
     get:
+      tags:
+      - Owner Resource
       parameters:
       - name: date
         in: query
@@ -899,12 +939,12 @@ paths:
         "403":
           description: Not Allowed
       summary: Orders
-      tags:
-      - Owner Resource
       security:
       - SecurityScheme: []
   /api/orders/{id}:
     get:
+      tags:
+      - Owner Resource
       parameters:
       - name: id
         in: path
@@ -924,12 +964,12 @@ paths:
         "403":
           description: Not Allowed
       summary: Order
-      tags:
-      - Owner Resource
       security:
       - SecurityScheme: []
   /api/orders/{id}/cancel:
     post:
+      tags:
+      - Owner Resource
       parameters:
       - name: id
         in: path
@@ -949,12 +989,12 @@ paths:
         "403":
           description: Not Allowed
       summary: Cancel
-      tags:
-      - Owner Resource
       security:
       - SecurityScheme: []
   /api/orders/{id}/confirm:
     post:
+      tags:
+      - Owner Resource
       parameters:
       - name: id
         in: path
@@ -974,12 +1014,12 @@ paths:
         "403":
           description: Not Allowed
       summary: Confirm
-      tags:
-      - Owner Resource
       security:
       - SecurityScheme: []
   /api/orders/{id}/deliver:
     post:
+      tags:
+      - Owner Resource
       parameters:
       - name: id
         in: path
@@ -1007,12 +1047,12 @@ paths:
         "400":
           description: Bad Request
       summary: Deliver
-      tags:
-      - Owner Resource
       security:
       - SecurityScheme: []
   /api/orders/{id}/mark-paid:
     post:
+      tags:
+      - Owner Resource
       parameters:
       - name: id
         in: path
@@ -1032,8 +1072,6 @@ paths:
         "403":
           description: Not Allowed
       summary: Paid
-      tags:
-      - Owner Resource
       security:
       - SecurityScheme: []
   /api/price-tiers:

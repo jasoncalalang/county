@@ -78,6 +78,21 @@ at acceptance, not the estimate shown on the quote. Quotes expire on read: a sen
 reads as `expired` the day after its `expiresOn`, and can no longer be accepted or
 declined. Quote numbers are a per-business sequence separate from order numbers.
 
+Order history (W3): every successful order action (confirm, cancel by the owner, cancel by the
+reseller, deliver, mark paid) writes one `order_event` row in the transaction that changes the
+order, after the rule check, so a rejected action leaves nothing. An event has the time, the
+status before and after, the order's `paid` flag afterwards, and the actor: the owner's user id
+or the reseller's id, taken only from the verified subject or the link's token, never from the
+request. Delivering as paid is one event; marking paid later is an event from `delivered` to
+`delivered`. `OrderView.events` lists them oldest first on `GET /orders/{id}`, on the owner
+action responses and on the reseller's order, cancel, placement-replay and quote-acceptance
+replay responses; it is empty for an order that has had no action, and for orders changed
+before V6, which are not backfilled. Each event carries `actorName` and no id: the owner sees
+the owner's display name (which may be null) or the reseller's name; a link holder sees the
+reseller's own name and the business name for what the owner did, never the owner's name or
+email. A database trigger rejects `UPDATE` and `DELETE` of an event (`TRUNCATE` is not
+covered). Placement has no event: `placedAt` records it.
+
 Date filters are delivery dates. Money is decimal PHP, quantity whole units. Status
 strings are lowercase. The order list includes each order's `resellerName` and its
 `items` (product name, unit, quantity) so a dashboard row needs no further calls;
@@ -112,6 +127,12 @@ Do not log bearer tokens/order links. API responses are `no-store` with no refer
      lock target. Send, cancel and decline lock only the quote. Creating a quote takes no
      quote lock: it share-locks the reseller, locks the business for the quote number,
      then share-locks products by ascending id.
+
+  `order_event` is not a lock target: an action inserts its event after it has locked the
+  order (and the reseller, for a reseller's cancel) and never locks an event. The row's foreign
+  keys take only key-share locks on the order, the reseller and the owner's `app_user` row, which
+  those updates do not conflict with. The owner's user id is read from the business without a
+  lock.
 - First sign-in takes a PostgreSQL advisory lock through a native query on the same
   entity manager, so concurrent first calls create one user.
 - Reseller token is stored as a bearer secret so an owner can copy its current link.

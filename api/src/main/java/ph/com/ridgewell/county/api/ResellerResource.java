@@ -8,6 +8,7 @@ import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import java.util.List;
+import ph.com.ridgewell.county.persistence.OrderActions;
 import ph.com.ridgewell.county.persistence.Orders;
 import ph.com.ridgewell.county.persistence.Quotes;
 
@@ -15,6 +16,7 @@ import ph.com.ridgewell.county.persistence.Quotes;
 @Produces("application/json")
 public class ResellerResource {
   @Inject Orders orders;
+  @Inject OrderActions actions;
   @Inject Quotes quotes;
 
   @GET
@@ -50,7 +52,7 @@ public class ResellerResource {
   @POST
   @Path("orders/{id}/cancel")
   public Views.Order cancel(@PathParam("token") String token, @PathParam("id") long id) {
-    return orders.transition(null, token, id, "cancelled", false);
+    return actions.cancelByReseller(token, id);
   }
 
   @GET

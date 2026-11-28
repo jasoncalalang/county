@@ -1,5 +1,5 @@
 // Pure helpers for the dashboard's order screens, kept apart so they can be tested.
-import type { OrderItemView, OrderSummaryView, OrderView } from "../api-types";
+import type { OrderEventView, OrderItemView, OrderSummaryView, OrderView } from "../api-types";
 import { formatMoney, manilaDate, type Status } from "../format";
 
 const RANK: Record<Status, number> = { placed: 0, confirmed: 1, delivered: 2, cancelled: 3 };
@@ -88,8 +88,35 @@ export type HistorySource = Pick<
   "placedAt" | "resellerName" | "confirmedAt" | "deliveredAt" | "cancelledAt" | "paidAt" | "events"
 >;
 
-/** The order's history for its detail page, oldest first. */
+function eventLabel(event: OrderEventView): string {
+  if (event.toStatus === "cancelled") return "Cancelled";
+  if (event.toStatus === "confirmed") return "Confirmed";
+  if (event.fromStatus === "delivered") return "Marked paid";
+  return event.paid ? "Delivered and paid" : "Delivered";
+}
+
+/**
+ * The order's history for its detail page, oldest first. The placement comes from `placedAt`,
+ * by the reseller; the rest from the API's events. An order changed before events began has
+ * none, so it falls back to its timestamps, which carry no names.
+ */
 export function orderHistory(order: HistorySource): HistoryEntry[] {
-  void order;
-  return [];
+  if (order.events.length) {
+    return [
+      { label: "Placed", at: order.placedAt, by: order.resellerName },
+      ...order.events.map((event) => ({
+        label: eventLabel(event),
+        at: event.at,
+        by: event.actorName ?? (event.actorType === "owner" ? "Owner" : null),
+      })),
+    ];
+  }
+  const stamped: [string, string | null][] = [
+    ["Placed", order.placedAt],
+    ["Confirmed", order.confirmedAt],
+    ["Delivered", order.deliveredAt],
+    ["Paid", order.paidAt],
+    ["Cancelled", order.cancelledAt],
+  ];
+  return stamped.flatMap(([label, at]) => (at ? [{ label, at, by: null }] : []));
 }

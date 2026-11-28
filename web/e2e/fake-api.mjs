@@ -31,10 +31,22 @@ function send(res, status, body) {
 }
 const problem = (res, status, detail, errors = {}) => send(res, status, { type: "about:blank", status, detail, errors });
 const field = (res, path, message) => problem(res, 422, "Check the submitted fields", { [path]: message });
+const OWNER_NAME = "E2E";
 const resellerName = (o) => db.resellers.find((r) => r.id === o.resellerId)?.name;
 
-function orderView(o) {
-  return { ...o, resellerName: resellerName(o), lines: o.lines.map((l) => ({ ...l })) };
+/**
+ * The history as the viewer sees it: the owner sees the owner's display name (the one /me
+ * returns); a reseller's link sees the business name instead, as the API does.
+ */
+function events(o, viewer) {
+  return (o.events ?? []).map(({ actor, ...event }) => ({
+    ...event,
+    actorType: actor,
+    actorName: actor === "reseller" ? resellerName(o) : viewer === "owner" ? OWNER_NAME : db.tenant.name,
+  }));
+}
+function orderView(o, viewer = "owner") {
+  return { ...o, resellerName: resellerName(o), lines: o.lines.map((l) => ({ ...l })), events: events(o, viewer) };
 }
 function summary(o) {
   const { id, number, resellerId, placedAt, deliveryDate, status, total, paid, note } = o;
@@ -47,10 +59,13 @@ function transition(o, target, actor, paid) {
     placed: actor === "owner" ? ["confirmed", "cancelled"] : ["cancelled"],
     confirmed: actor === "owner" ? ["delivered", "cancelled"] : [],
   };
+  const from = o.status;
+  const record = () => (o.events ??= []).push({ at: now(), fromStatus: from, toStatus: o.status, paid: o.paid, actor });
   if (target === "paid") {
     if (o.status !== "delivered" || o.paid) return false;
     o.paid = true;
     o.paidAt = now();
+    record();
     return true;
   }
   if (!(allowed[o.status] ?? []).includes(target)) return false;
@@ -60,6 +75,7 @@ function transition(o, target, actor, paid) {
     o.paid = paid;
     o.paidAt = paid ? now() : null;
   }
+  record();
   return true;
 }
 
@@ -103,7 +119,7 @@ createServer(async (req, res) => {
         return send(res, 200, quoteView(q));
       }
       const input = await body(req);
-      if (q.acceptedOrderId) return send(res, 200, orderView(db.orders.find((o) => o.id === q.acceptedOrderId)));
+      if (q.acceptedOrderId) return send(res, 200, orderView(db.orders.find((o) => o.id === q.acceptedOrderId), "reseller"));
       if (quoteStatus(q) !== "sent") return problem(res, 409, `Quote is now ${quoteStatus(q)}`);
       const order = {
         id: db.nextId++,
@@ -126,7 +142,7 @@ createServer(async (req, res) => {
       Object.assign(q, { status: "accepted", acceptedAt: now(), acceptedOrderId: order.id });
       reseller.status = "active";
       reseller.lastOrderAt = order.placedAt;
-      return send(res, 201, orderView(order));
+      return send(res, 201, orderView(order, "reseller"));
     }
 
     // Reseller (token) routes
@@ -150,7 +166,7 @@ createServer(async (req, res) => {
       if (x[2] === "/orders" && req.method === "POST") {
         const input = await body(req);
         const seen = db.keys.get(input.idempotencyKey);
-        if (seen) return send(res, 200, orderView(seen));
+        if (seen) return send(res, 200, orderView(seen, "reseller"));
         const lines = [];
         for (const [i, line] of input.lines.entries()) {
           const p = db.products.find((q) => q.id === line.productId);
@@ -178,14 +194,14 @@ createServer(async (req, res) => {
         db.keys.set(input.idempotencyKey, order);
         reseller.status = "active";
         reseller.lastOrderAt = order.placedAt;
-        return send(res, 201, orderView(order));
+        return send(res, 201, orderView(order, "reseller"));
       }
       const order = db.orders.find((o) => o.id === Number(x[3]) && o.resellerId === reseller.id);
       if (!order) return problem(res, 404, "Not found");
-      if (!x[4] && req.method === "GET") return send(res, 200, orderView(order));
+      if (!x[4] && req.method === "GET") return send(res, 200, orderView(order, "reseller"));
       if (x[4] && req.method === "POST") {
         if (!transition(order, "cancelled", "reseller")) return problem(res, 409, `Order is now ${order.status}`);
-        return send(res, 200, orderView(order));
+        return send(res, 200, orderView(order, "reseller"));
       }
     }
 

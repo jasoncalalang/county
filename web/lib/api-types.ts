@@ -44,6 +44,8 @@ export interface ResellerView {
   status: "invited" | "active" | "blocked";
   token: string;
   orderLink: string;
+  /** When the link stops working: 90 days after it was issued (ADR 0018). */
+  linkExpiresAt: string;
   lastOrderAt: string | null;
 }
 

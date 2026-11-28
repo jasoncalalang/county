@@ -6,6 +6,7 @@ import static jakarta.persistence.LockModeType.PESSIMISTIC_WRITE;
 
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import java.math.BigDecimal;
@@ -23,6 +24,8 @@ import ph.com.ridgewell.county.domain.*;
 public class Orders {
   static final ZoneId ZONE = ZoneId.of("Asia/Manila");
   private static final BigDecimal MAXIMUM = new BigDecimal("9999999999.99");
+
+  @Inject OrderHistory history;
 
   public record Placement(boolean replay, Views.Order order) {}
 
@@ -199,7 +202,7 @@ public class Orders {
 
   @Transactional
   public Views.Order get(String subject, long id) {
-    return view(order(Owners.tenant(subject).id, id, null, NONE));
+    return ownerView(order(Owners.tenant(subject).id, id, null, NONE));
   }
 
   @Transactional
@@ -267,25 +270,31 @@ public class Orders {
       String subject, String token, long orderId, String target, boolean paid) {
     long tenant;
     Long resellerId = null;
+    long ownerUserId = 0;
     if (token != null) {
       var reseller = reseller(token, PESSIMISTIC_WRITE);
       tenant = reseller.tenantId;
       resellerId = reseller.id;
-    } else tenant = Owners.tenant(subject).id;
+    } else {
+      var business = Owners.tenant(subject);
+      tenant = business.id;
+      ownerUserId = business.ownerUserId;
+    }
     var order = order(tenant, orderId, resellerId, PESSIMISTIC_WRITE);
     String current = order.status;
     Instant now = Times.now();
+    OrderRules.Status from = statusValue(current);
+    OrderRules.Status to = from;
     if (target.equals("paid")) {
       if (!current.equals("delivered") || order.paid)
         throw new Problem(409, "Order is now " + current);
       order.paid = true;
       order.paidAt = now;
     } else {
+      to = statusValue(target);
       try {
         OrderRules.transition(
-            statusValue(current),
-            statusValue(target),
-            token == null ? OrderRules.Actor.OWNER : OrderRules.Actor.RESELLER);
+            from, to, token == null ? OrderRules.Actor.OWNER : OrderRules.Actor.RESELLER);
       } catch (IllegalArgumentException e) {
         throw new Problem(409, "Order is now " + current);
       }
@@ -301,6 +310,12 @@ public class Orders {
         default -> throw new Problem(409, "Invalid transition");
       }
     }
+    if (token == null) {
+      history.byOwner(order, from, to, ownerUserId, now);
+      SalesOrder.flush();
+      return ownerView(order);
+    }
+    history.byReseller(order, from, to, resellerId, now);
     SalesOrder.flush();
     return view(order);
   }
@@ -343,13 +358,25 @@ public class Orders {
         .orElseThrow(() -> new Problem(404, "Not found"));
   }
 
+  private static List<OrderLine> lines(SalesOrder o) {
+    return OrderLine.list("tenantId = ?1 and orderId = ?2", Sort.by("id"), o.tenantId, o.id);
+  }
+
+  /** An order as the owner sees it, with its history. */
+  private Views.Order ownerView(SalesOrder o) {
+    return view(o, lines(o), history.forOwner(o));
+  }
+
   static Views.Order view(SalesOrder o) {
-    return view(
-        o,
-        OrderLine.list("tenantId = ?1 and orderId = ?2", Sort.by("id"), o.tenantId, o.id));
+    return view(o, lines(o));
   }
 
   static Views.Order view(SalesOrder o, List<OrderLine> lines) {
+    return view(o, lines, List.of());
+  }
+
+  private static Views.Order view(
+      SalesOrder o, List<OrderLine> lines, List<Views.OrderEvent> events) {
     return new Views.Order(
         o.id,
         o.resellerId,
@@ -371,6 +398,6 @@ public class Orders {
                     new Views.OrderLine(
                         l.productId, l.productName, l.unit, l.quantity, l.price, l.total))
             .toList(),
-        List.of());
+        events);
   }
 }

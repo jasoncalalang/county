@@ -345,3 +345,38 @@ test("fractional quantities: kg takes 1.5, a pack does not, and the total rounds
   await expect(page.getByRole("cell", { name: "₱513.30" })).toBeVisible();
   await context.close();
 });
+
+test("short delivery: the reseller reports 8 of 10 received, with JavaScript off", async ({ browser }) => {
+  // Order #1 was delivered above: 10 pack of Longganisa Hamonado at 120.00.
+  const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  await page.goto(`${link}/orders/1`);
+  await page.getByRole("link", { name: "Report a problem with this delivery" }).click();
+  await expect(page).toHaveURL(`${link}/orders/1/discrepancy`);
+  await expect(page.getByRole("heading", { name: "Report a problem with order #1" })).toBeVisible();
+  await expect(page.getByLabel("Received quantity of Longganisa Hamonado")).toHaveValue("10");
+  await expect(page.getByLabel("Received quantity of Tocino")).toHaveValue("5");
+  await shot(page, "15-report-form");
+
+  await page.getByRole("button", { name: "Send report" }).click();
+  await expect(page.getByRole("alert")).toContainText("Change at least one received quantity to report a problem.");
+
+  await page.getByLabel("Received quantity of Longganisa Hamonado").fill("8");
+  await page.getByLabel("Note for your supplier (optional)").fill("2 packs were crushed");
+  await page.getByRole("button", { name: "Send report" }).click();
+
+  await expect(page).toHaveURL(`${link}/orders/1/discrepancy`);
+  await expect(page.getByRole("heading", { name: "Delivery report for order #1" })).toBeVisible();
+  await expect(page.getByText("Open", { exact: true })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "8 of 10 pack" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "₱240.00 short" })).toBeVisible();
+  await expect(page.getByText("2 packs were crushed")).toBeVisible();
+  await expect(page.getByText("Waiting for your supplier")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
+  await shot(page, "16-report-sent");
+
+  await page.goto(`${link}/orders/1`);
+  await expect(page.getByRole("link", { name: "View report" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Report a problem with this delivery" })).toHaveCount(0);
+  await context.close();
+});

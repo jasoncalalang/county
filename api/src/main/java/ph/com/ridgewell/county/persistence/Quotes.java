@@ -31,6 +31,7 @@ import ph.com.ridgewell.county.domain.QuoteRules.Status;
 @ApplicationScoped
 public class Quotes {
   @Inject Orders orders;
+  @Inject Pricing pricing;
 
   public record Acceptance(boolean replay, Views.Order order) {}
 
@@ -78,7 +79,7 @@ public class Quotes {
       throw Problem.field("expiresOn", "Choose today or a later day");
     // The business lock allocates the quote number without gaps.
     Business business = Business.findById(tenant, PESSIMISTIC_WRITE);
-    var priced = Orders.price(reseller, input.lines());
+    var priced = pricing.price(reseller, input.lines());
     var q = new Quote();
     q.tenantId = tenant;
     q.resellerId = reseller.id;

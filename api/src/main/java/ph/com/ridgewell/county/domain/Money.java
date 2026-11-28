@@ -8,7 +8,8 @@ import java.math.RoundingMode;
  * quantity rounded half up to centavos (ADR 0017), and an order total is the sum of those lines.
  */
 public final class Money {
-  private static final BigDecimal MAXIMUM = new BigDecimal("9999999999.99");
+  /** The largest value numeric(12,2) holds: for a price, a line total and an order total. */
+  public static final BigDecimal MAXIMUM = new BigDecimal("9999999999.99");
   private static final BigDecimal MAXIMUM_QUANTITY = new BigDecimal("9999");
   private static final BigDecimal ONE_CENTAVO = new BigDecimal("0.01");
 
@@ -40,23 +41,6 @@ public final class Money {
   }
 
   public static BigDecimal line(BigDecimal price, int quantity) {
-    if (price == null
-        || price.signum() <= 0
-        || price.compareTo(MAXIMUM) > 0
-        || quantity < 1
-        || quantity > 9999) {
-      throw new IllegalArgumentException(
-          "A positive price and quantity from 1 to 9999 are required");
-    }
-    final BigDecimal centavos;
-    try {
-      centavos = price.setScale(2, RoundingMode.UNNECESSARY);
-    } catch (ArithmeticException e) {
-      throw new IllegalArgumentException("Price must have no fractions of a centavo", e);
-    }
-    BigDecimal total = centavos.multiply(BigDecimal.valueOf(quantity));
-    if (total.compareTo(MAXIMUM) > 0)
-      throw new IllegalArgumentException("Line total exceeds numeric(12,2)");
-    return total;
+    return line(price, BigDecimal.valueOf(quantity));
   }
 }

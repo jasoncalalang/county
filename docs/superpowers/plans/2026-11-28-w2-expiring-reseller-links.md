@@ -69,8 +69,9 @@ release working (expand-first). Postgres 16 and 17.
 
 ### API
 
-- `domain/ResellerLink` (new): `LIFETIME = Duration.ofDays(90)`, `expiry(Instant issuedAt)`,
-  `active(Instant expiresAt, Instant now)` (active while `now` is before the expiry). Pure.
+- `domain/ResellerLink` (new): `LIFETIME = Duration.ofDays(90)`, `expiry(Instant issuedAt)`. Pure.
+  Whether a link is still active is not a domain method: the one query in `Reseller.byToken`
+  (`tokenExpiresAt > now`) decides it, so a second rule would be dead code.
 - `persistence/ResellerLinks` (new service, injects `Clock`): `resolve(token, lock)` returns
   the reseller for a well-formed, known, unblocked, unexpired token or throws the same
   `Problem(404, "Not found")` as today; `issue(reseller)` sets a new token and expiry. The
@@ -110,7 +111,7 @@ API tests set `token_expires_at` in the past through `TestSql` where an expired 
 
 | # | Behaviour | Class | Fails first because |
 |---|---|---|---|
-| T0 | `ResellerLink`: expiry is issue time plus 90 days; active strictly before the expiry, not at it or after | `domain/ResellerLinkTest` (new) | stub |
+| T0 | `ResellerLink`: the lifetime is 90 days and the expiry is issue time plus 90 days | `domain/ResellerLinkTest` (new) | stub |
 | T1 | Schema: `token_expires_at` is `NOT NULL`; a reseller inserted without it gets about 90 days | `api/ResellerLinkSchemaTest` (new) | no column |
 | T2 | A new reseller's `linkExpiresAt` is 90 days ahead (within a minute); the link works; once `token_expires_at` is in the past the catalog is 404 | `api/ResellerLinkApiTest` (new) | field absent; expired link still 200 |
 | T3 | Every operation under `/api/order/{token}` in `api/contract/openapi.yaml` answers 404 for an expired link (ids `1`, a valid JSON body where one is needed, including a placement that replays a used idempotency key) | same | expired link is served |

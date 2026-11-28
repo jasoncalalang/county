@@ -13,9 +13,4 @@ public final class ResellerLink {
   public static Instant expiry(Instant issuedAt) {
     return issuedAt.plus(LIFETIME);
   }
-
-  /** Whether a link that expires at {@code expiresAt} still works at {@code now}. */
-  public static boolean active(Instant expiresAt, Instant now) {
-    return now.isBefore(expiresAt);
-  }
 }

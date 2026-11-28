@@ -18,20 +18,4 @@ class ResellerLinkTest {
   void theExpiryIsTheIssueTimePlusTheLifetime() {
     assertEquals(Instant.parse("2027-02-26T09:30:00Z"), ResellerLink.expiry(ISSUED));
   }
-
-  @Test
-  void aLinkWorksBeforeItsExpiry() {
-    Instant expiry = ResellerLink.expiry(ISSUED);
-
-    assertTrue(ResellerLink.active(expiry, ISSUED));
-    assertTrue(ResellerLink.active(expiry, expiry.minusNanos(1_000)));
-  }
-
-  @Test
-  void aLinkStopsWorkingAtItsExpiryAndAfter() {
-    Instant expiry = ResellerLink.expiry(ISSUED);
-
-    assertFalse(ResellerLink.active(expiry, expiry));
-    assertFalse(ResellerLink.active(expiry, expiry.plusSeconds(1)));
-  }
 }

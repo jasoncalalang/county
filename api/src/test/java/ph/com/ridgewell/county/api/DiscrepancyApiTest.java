@@ -427,7 +427,7 @@ class DiscrepancyApiTest {
     refused(fileAsOwner(o.id(), body(UUID.randomUUID(), "x".repeat(501), one)), "note");
     assertEquals(0, reports(s, o));
 
-    // 50 lines is the most, and 500 characters is the longest note.
+    // 500 characters is the longest note.
     fileAsReseller(s.rosaToken(), o.id(), body(UUID.randomUUID(), "x".repeat(500), one))
         .then()
         .statusCode(201);
@@ -525,5 +525,351 @@ class DiscrepancyApiTest {
         assertTrue(((java.sql.Timestamp) row.get("filed_at")).toInstant().isAfter(Instant.now().minusSeconds(60)));
       }
     }
+  }
+
+  /** The report as the database holds it, apart from what resolving may change. */
+  private String capturedRows(Order o) throws SQLException {
+    try (var c = source.getConnection()) {
+      return TestSql.rows(
+                  c,
+                  "SELECT id, tenant_id, order_id, filed_by, filed_at, note, shortfall_total,"
+                      + " idempotency_key FROM discrepancy_report WHERE order_id=?",
+                  o.id())
+              .toString()
+          + TestSql.rows(
+                  c,
+                  "SELECT l.* FROM discrepancy_line l JOIN discrepancy_report r ON r.id = l.report_id"
+                      + " WHERE r.order_id=? ORDER BY l.id",
+                  o.id());
+    }
+  }
+
+  private long fileByReseller(Shop s, Order o) {
+    return fileAsReseller(s.rosaToken(), o.id(), body(UUID.randomUUID(), "Short", line(s.ham(), "8")))
+        .then()
+        .statusCode(201)
+        .extract()
+        .jsonPath()
+        .getLong("id");
+  }
+
+  private void fileByOwner(Shop s, Order o) {
+    fileAsOwner(o.id(), body(UUID.randomUUID(), "Counted", line(s.ham(), "8")))
+        .then()
+        .statusCode(201);
+  }
+
+  @Test
+  @TestSecurity(
+      user = "disc-owner-resolves",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "disc-owner-resolves")})
+  void theOwnerApprovesOrDeclinesAResellerFiledReportWithAnOptionalNote() throws SQLException {
+    Shop s = shop("disc-owner-resolves");
+    Order approve = deliveredHam(s, s.rosa());
+    Order decline = deliveredHam(s, s.rosa());
+    Order bare = deliveredHam(s, s.rosa());
+    fileByReseller(s, approve);
+    fileByReseller(s, decline);
+    fileByReseller(s, bare);
+    Instant before = Instant.now().minusSeconds(5);
+
+    var approved =
+        resolveAsOwner(approve.id(), "approve", "{\"note\":\"Credit next order\"}")
+            .then()
+            .statusCode(200)
+            .body("status", is("approved"))
+            .body("resolvedBy", is("owner"))
+            .body("resolutionNote", is("Credit next order"))
+            .body("filedBy", is("reseller"))
+            .body("note", is("Short"))
+            .body("shortfallTotal", is(240.0f))
+            .extract()
+            .response();
+    assertFalse(Instant.parse(approved.path("resolvedAt")).isBefore(before));
+    assertEquals(
+        approved.jsonPath().getMap("$"), readAsOwner(approve.id()).jsonPath().getMap("$"));
+    assertEquals(
+        approved.jsonPath().getMap("$"),
+        readAsReseller(s.rosaToken(), approve.id()).jsonPath().getMap("$"));
+
+    resolveAsOwner(decline.id(), "decline", "{\"note\":\"Counted twice at the door\"}")
+        .then()
+        .statusCode(200)
+        .body("status", is("declined"))
+        .body("resolvedBy", is("owner"))
+        .body("resolutionNote", is("Counted twice at the door"));
+
+    // The body is optional: with none at all the note stays empty.
+    resolveAsOwner(bare.id(), "approve", null)
+        .then()
+        .statusCode(200)
+        .body("status", is("approved"))
+        .body("resolutionNote", is(""))
+        .body("resolvedAt", notNullValue());
+  }
+
+  @Test
+  @TestSecurity(
+      user = "disc-reseller-resolves",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "disc-reseller-resolves")})
+  void theResellerApprovesOrDeclinesAnOwnerFiledReport() throws SQLException {
+    Shop s = shop("disc-reseller-resolves");
+    Order approve = deliveredHam(s, s.rosa());
+    Order decline = deliveredHam(s, s.rosa());
+    Order empty = deliveredHam(s, s.rosa());
+    fileByOwner(s, approve);
+    fileByOwner(s, decline);
+    fileByOwner(s, empty);
+
+    var approved =
+        resolveAsReseller(s.rosaToken(), approve.id(), "approve", "{\"note\":\"Agreed\"}")
+            .then()
+            .statusCode(200)
+            .body("status", is("approved"))
+            .body("resolvedBy", is("reseller"))
+            .body("resolutionNote", is("Agreed"))
+            .body("filedBy", is("owner"))
+            .extract()
+            .response();
+    assertEquals(
+        approved.jsonPath().getMap("$"), readAsOwner(approve.id()).jsonPath().getMap("$"));
+
+    resolveAsReseller(s.rosaToken(), decline.id(), "decline", "{\"note\":\"We got 10\"}")
+        .then()
+        .statusCode(200)
+        .body("status", is("declined"))
+        .body("resolvedBy", is("reseller"))
+        .body("resolutionNote", is("We got 10"));
+    resolveAsReseller(s.rosaToken(), empty.id(), "decline", "{}")
+        .then()
+        .statusCode(200)
+        .body("resolutionNote", is(""));
+  }
+
+  @Test
+  @TestSecurity(
+      user = "disc-own-report",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "disc-own-report")})
+  void theFilerCannotResolveTheirOwnReport() throws SQLException {
+    Shop s = shop("disc-own-report");
+    Order byReseller = deliveredHam(s, s.rosa());
+    Order byOwner = deliveredHam(s, s.rosa());
+    fileByReseller(s, byReseller);
+    fileByOwner(s, byOwner);
+    String refusal = "Only the other party can resolve this report";
+
+    for (String action : new String[] {"approve", "decline"}) {
+      resolveAsReseller(s.rosaToken(), byReseller.id(), action, "{}")
+          .then()
+          .statusCode(409)
+          .contentType("application/problem+json")
+          .body("detail", is(refusal));
+      resolveAsOwner(byOwner.id(), action, "{}").then().statusCode(409).body("detail", is(refusal));
+    }
+
+    readAsOwner(byReseller.id()).then().body("status", is("open")).body("resolvedBy", nullValue());
+    readAsOwner(byOwner.id()).then().body("status", is("open")).body("resolvedBy", nullValue());
+  }
+
+  @Test
+  @TestSecurity(
+      user = "disc-twice",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "disc-twice")})
+  void aReportIsResolvedOnceWhoeverTriesAgain() throws SQLException {
+    Shop s = shop("disc-twice");
+    Order o = deliveredHam(s, s.rosa());
+    fileByReseller(s, o);
+    var first =
+        resolveAsOwner(o.id(), "approve", "{\"note\":\"First\"}")
+            .then()
+            .statusCode(200)
+            .extract()
+            .response();
+
+    resolveAsOwner(o.id(), "approve", "{\"note\":\"Second\"}")
+        .then()
+        .statusCode(409)
+        .body("detail", is("This report is now approved"));
+    resolveAsOwner(o.id(), "decline", "{\"note\":\"Second\"}")
+        .then()
+        .statusCode(409)
+        .body("detail", is("This report is now approved"));
+    resolveAsReseller(s.rosaToken(), o.id(), "decline", "{\"note\":\"Second\"}")
+        .then()
+        .statusCode(409)
+        .body("detail", is("This report is now approved"));
+
+    assertEquals(first.jsonPath().getMap("$"), readAsOwner(o.id()).jsonPath().getMap("$"));
+  }
+
+  @Test
+  @TestSecurity(
+      user = "disc-none",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "disc-none")})
+  void resolvingAnOrderWithNoReportIsNotFound() throws SQLException {
+    Shop s = shop("disc-none");
+    Order o = deliveredHam(s, s.rosa());
+
+    readAsOwner(o.id()).then().statusCode(404);
+    readAsReseller(s.rosaToken(), o.id()).then().statusCode(404);
+    for (String action : new String[] {"approve", "decline"}) {
+      resolveAsOwner(o.id(), action, "{}").then().statusCode(404);
+      resolveAsReseller(s.rosaToken(), o.id(), action, "{}").then().statusCode(404);
+    }
+  }
+
+  @Test
+  @TestSecurity(
+      user = "disc-resolve-captured",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "disc-resolve-captured")})
+  void resolvingChangesOnlyTheStatusTheResolverTheTimeAndTheNote() throws SQLException {
+    Shop s = shop("disc-resolve-captured");
+    Order o;
+    try (var c = source.getConnection()) {
+      o = delivered(c, s, s.rosa(), ham(s, "10"), rice(s, "1.5"));
+    }
+    fileAsReseller(
+            s.rosaToken(),
+            o.id(),
+            body(UUID.randomUUID(), "Short", line(s.ham(), "8"), line(s.rice(), "1.25")))
+        .then()
+        .statusCode(201);
+    String captured = capturedRows(o);
+    var before = readAsOwner(o.id()).jsonPath();
+
+    resolveAsOwner(o.id(), "approve", "{\"note\":\"Fine\"}").then().statusCode(200);
+
+    assertEquals(captured, capturedRows(o));
+    var after = readAsOwner(o.id()).jsonPath();
+    assertEquals(before.getList("lines"), after.getList("lines"));
+    for (String field :
+        new String[] {"id", "orderId", "orderNumber", "filedBy", "filedAt", "note", "shortfallTotal"})
+      assertEquals((Object) before.get(field), after.get(field), field);
+    assertEquals("approved", after.getString("status"));
+    assertEquals("owner", after.getString("resolvedBy"));
+    assertEquals("Fine", after.getString("resolutionNote"));
+    assertNotNull(after.getString("resolvedAt"));
+  }
+
+  @Test
+  @TestSecurity(
+      user = "disc-resolve-order",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "disc-resolve-order")})
+  void resolvingLeavesTheOrderItsLinesAndItsEventsExactlyAsTheyWere() throws SQLException {
+    Shop s = shop("disc-resolve-order");
+    Order byReseller = deliveredHam(s, s.rosa());
+    Order byOwner = deliveredHam(s, s.rosa());
+    fileByReseller(s, byReseller);
+    fileByOwner(s, byOwner);
+    String storedReseller = orderRows(byReseller);
+    String storedOwner = orderRows(byOwner);
+    String viewReseller = given().basePath("").get("/api/orders/" + byReseller.id()).asString();
+    String viewOwner = given().basePath("").get("/api/orders/" + byOwner.id()).asString();
+
+    resolveAsOwner(byReseller.id(), "approve", "{}").then().statusCode(200);
+    resolveAsReseller(s.rosaToken(), byOwner.id(), "decline", "{}").then().statusCode(200);
+
+    assertEquals(storedReseller, orderRows(byReseller));
+    assertEquals(storedOwner, orderRows(byOwner));
+    assertEquals(viewReseller, given().basePath("").get("/api/orders/" + byReseller.id()).asString());
+    assertEquals(viewOwner, given().basePath("").get("/api/orders/" + byOwner.id()).asString());
+  }
+
+  @Test
+  @TestSecurity(
+      user = "disc-resolve-note",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "disc-resolve-note")})
+  void aResolutionNoteOverFiveHundredCharactersIsRefusedAndLeavesTheReportOpen()
+      throws SQLException {
+    Shop s = shop("disc-resolve-note");
+    Order byReseller = deliveredHam(s, s.rosa());
+    Order byOwner = deliveredHam(s, s.rosa());
+    fileByReseller(s, byReseller);
+    fileByOwner(s, byOwner);
+    String tooLong = "{\"note\":\"" + "x".repeat(501) + "\"}";
+
+    for (String action : new String[] {"approve", "decline"}) {
+      refused(resolveAsOwner(byReseller.id(), action, tooLong), "note");
+      refused(resolveAsReseller(s.rosaToken(), byOwner.id(), action, tooLong), "note");
+    }
+    readAsOwner(byReseller.id()).then().body("status", is("open"));
+    readAsOwner(byOwner.id()).then().body("status", is("open"));
+
+    resolveAsOwner(byReseller.id(), "approve", "{\"note\":\"" + "x".repeat(500) + "\"}")
+        .then()
+        .statusCode(200);
+  }
+
+  @Test
+  @TestSecurity(
+      user = "disc-list",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "disc-list")})
+  void theOwnerListsReportsNewestFirstAndFiltersByStatus() throws SQLException {
+    Shop s = shop("disc-list");
+    Order first = deliveredHam(s, s.rosa());
+    Order second;
+    Order third;
+    try (var c = source.getConnection()) {
+      second = delivered(c, s, s.ben(), ham(s, "10"));
+      third = delivered(c, s, s.rosa(), ham(s, "10"));
+    }
+    long firstReport = fileByReseller(s, first);
+    fileAsReseller(s.benToken(), second.id(), body(line(s.ham(), "12"))).then().statusCode(201);
+    fileByOwner(s, third);
+    resolveAsOwner(first.id(), "approve", "{}").then().statusCode(200);
+
+    var all = listAsOwner("").then().statusCode(200).extract().jsonPath();
+    assertEquals(
+        List.of((int) third.id(), (int) second.id(), (int) first.id()), all.getList("orderId"));
+    assertEquals(
+        List.of((int) third.number(), (int) second.number(), (int) first.number()),
+        all.getList("orderNumber"));
+    assertEquals(List.of("Rosa", "Ben", "Rosa"), all.getList("resellerName"));
+    assertEquals(List.of("owner", "reseller", "reseller"), all.getList("filedBy"));
+    assertEquals(List.of("open", "open", "approved"), all.getList("status"));
+    assertEquals(List.of(240.0f, -240.0f, 240.0f), all.getList("shortfallTotal"));
+    assertEquals((int) firstReport, (int) all.getList("id").get(2));
+    assertEquals((int) s.rosa(), (int) all.getList("resellerId").get(0));
+    assertEquals((int) s.ben(), (int) all.getList("resellerId").get(1));
+    assertFalse(Instant.parse(all.getString("filedAt[0]")).isBefore(Instant.parse(all.getString("filedAt[2]"))));
+    // A summary is a row for a list: no lines, no notes.
+    assertEquals(
+        java.util.Set.of(
+            "id", "orderId", "orderNumber", "resellerId", "resellerName", "filedBy", "status",
+            "shortfallTotal", "filedAt"),
+        all.getMap("[0]").keySet());
+
+    assertEquals(
+        List.of((int) third.id(), (int) second.id()),
+        listAsOwner("?status=open").then().statusCode(200).extract().jsonPath().getList("orderId"));
+    assertEquals(
+        List.of((int) first.id()),
+        listAsOwner("?status=approved")
+            .then()
+            .statusCode(200)
+            .extract()
+            .jsonPath()
+            .getList("orderId"));
+    listAsOwner("?status=declined").then().statusCode(200).body("$", empty());
+  }
+
+  @Test
+  @TestSecurity(
+      user = "disc-list-status",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "disc-list-status")})
+  void anUnknownStatusFilterIsRefusedOnTheStatusField() throws SQLException {
+    shop("disc-list-status");
+    for (String query : new String[] {"?status=pending", "?status=", "?status=open%20"})
+      refused(listAsOwner(query), "status", "Use open, approved or declined");
   }
 }

@@ -82,4 +82,6 @@ public final class Inputs {
       @NotEmpty @Size(max = 50) List<@NotNull @Valid DiscrepancyLine> lines,
       @Size(max = 500) String note,
       @NotNull UUID idempotencyKey) {}
+
+  public record Resolve(String note) {}
 }

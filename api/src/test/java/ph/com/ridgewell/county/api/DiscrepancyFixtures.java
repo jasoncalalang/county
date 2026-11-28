@@ -209,4 +209,17 @@ final class DiscrepancyFixtures {
   static Response readAsOwner(long order) {
     return given().basePath("").get(owner(order));
   }
+
+  /** A resolution: {@code action} is approve or decline. A null body sends no body at all. */
+  static Response resolveAsOwner(long order, String action, String body) {
+    return post(owner(order) + "/" + action, body);
+  }
+
+  static Response resolveAsReseller(String token, long order, String action, String body) {
+    return post(reseller(token, order) + "/" + action, body);
+  }
+
+  static Response listAsOwner(String query) {
+    return given().basePath("").get("/api/discrepancies" + query);
+  }
 }

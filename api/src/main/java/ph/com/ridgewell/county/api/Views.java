@@ -229,4 +229,16 @@ public final class Views {
       @Schema(format = "date-time", nullable = true) String resolvedAt,
       BigDecimal shortfallTotal,
       List<DiscrepancyLine> lines) {}
+
+  @Schema(name = "DiscrepancySummaryView", description = "One report as the owner's list shows it")
+  public record DiscrepancySummary(
+      long id,
+      long orderId,
+      long orderNumber,
+      long resellerId,
+      String resellerName,
+      @Schema(enumeration = {"owner", "reseller"}) String filedBy,
+      @Schema(enumeration = {"open", "approved", "declined"}) String status,
+      BigDecimal shortfallTotal,
+      @Schema(format = "date-time") String filedAt) {}
 }

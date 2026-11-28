@@ -46,4 +46,22 @@ public class OwnerDiscrepancyResource {
   public Views.Discrepancy get(@PathParam("id") long id) {
     return discrepancies.forOwner(subject(), id);
   }
+
+  @POST
+  @Path("orders/{id}/discrepancy/approve")
+  public Views.Discrepancy approve(@PathParam("id") long id, Inputs.Resolve input) {
+    throw new UnsupportedOperationException();
+  }
+
+  @POST
+  @Path("orders/{id}/discrepancy/decline")
+  public Views.Discrepancy decline(@PathParam("id") long id, Inputs.Resolve input) {
+    throw new UnsupportedOperationException();
+  }
+
+  @GET
+  @Path("discrepancies")
+  public java.util.List<Views.DiscrepancySummary> list(@QueryParam("status") String status) {
+    throw new UnsupportedOperationException();
+  }
 }

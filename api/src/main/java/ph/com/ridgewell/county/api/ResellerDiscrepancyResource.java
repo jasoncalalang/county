@@ -37,4 +37,18 @@ public class ResellerDiscrepancyResource {
   public Views.Discrepancy get(@PathParam("token") String token, @PathParam("id") long id) {
     return discrepancies.forReseller(token, id);
   }
+
+  @POST
+  @Path("approve")
+  public Views.Discrepancy approve(
+      @PathParam("token") String token, @PathParam("id") long id, Inputs.Resolve input) {
+    throw new UnsupportedOperationException();
+  }
+
+  @POST
+  @Path("decline")
+  public Views.Discrepancy decline(
+      @PathParam("token") String token, @PathParam("id") long id, Inputs.Resolve input) {
+    throw new UnsupportedOperationException();
+  }
 }

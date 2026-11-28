@@ -212,7 +212,7 @@ public class Owners {
     switch (action) {
       case "block" -> reseller.status = "blocked";
       case "unblock" -> reseller.status = reseller.hasOrdered ? "active" : "invited";
-      case "reissue-link" -> reseller.token = links.newToken();
+      case "reissue-link" -> links.issue(reseller);
       default -> throw new Problem(404, "Not found");
     }
     Reseller.flush();

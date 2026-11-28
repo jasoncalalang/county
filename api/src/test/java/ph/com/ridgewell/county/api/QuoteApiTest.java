@@ -185,6 +185,7 @@ class QuoteApiTest {
             .body("deliveryDate", is(catalogDate))
             .body("lines.productName", contains("Hamonado", "Longganisa"))
             .body("lines.price", contains(120.0f, 50.0f))
+            .body("events", empty())
             .extract()
             .jsonPath();
     long orderId = order.getLong("id");

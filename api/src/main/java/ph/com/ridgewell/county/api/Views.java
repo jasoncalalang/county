@@ -97,6 +97,15 @@ public final class Views {
       @Schema(enumeration = {"placed", "confirmed", "delivered", "cancelled"}) String status,
       @Schema(format = "date-time") String placedAt) {}
 
+  @Schema(name = "OrderEventView")
+  public record OrderEvent(
+      @Schema(format = "date-time") String at,
+      @Schema(enumeration = {"placed", "confirmed", "delivered", "cancelled"}) String fromStatus,
+      @Schema(enumeration = {"placed", "confirmed", "delivered", "cancelled"}) String toStatus,
+      boolean paid,
+      @Schema(enumeration = {"owner", "reseller"}) String actorType,
+      @Schema(nullable = true) String actorName) {}
+
   @Schema(name = "OrderView")
   public record Order(
       long id,
@@ -113,7 +122,8 @@ public final class Views {
       @Schema(format = "date-time", nullable = true) String deliveredAt,
       @Schema(format = "date-time", nullable = true) String cancelledAt,
       @Schema(format = "date-time", nullable = true) String paidAt,
-      List<OrderLine> lines) {}
+      List<OrderLine> lines,
+      @Schema(description = "What was done to the order, oldest first") List<OrderEvent> events) {}
 
   @Schema(name = "CatalogView")
   public record Catalog(

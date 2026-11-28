@@ -370,6 +370,7 @@ public class Orders {
                 l ->
                     new Views.OrderLine(
                         l.productId, l.productName, l.unit, l.quantity, l.price, l.total))
-            .toList());
+            .toList(),
+        List.of());
   }
 }

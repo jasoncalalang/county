@@ -85,6 +85,19 @@ at acceptance, not the estimate shown on the quote. Quotes expire on read: a sen
 reads as `expired` the day after its `expiresOn`, and can no longer be accepted or
 declined. Quote numbers are a per-business sequence separate from order numbers.
 
+Reseller links (W2, ADR 0018): a link works for 90 days after its token was issued. Creating a reseller and
+`POST /resellers/{id}/reissue-link` issue a token and set `token_expires_at` 90 days ahead; the old token is
+unknown at once. `ResellerView.linkExpiresAt` shows the expiry. Using a link, unblocking and editing a
+reseller never change it, and no request body can set it (extra fields are ignored). The lifetime is the
+constant `ResellerLink.LIFETIME`, not a setting. An expired link is refused at its expiry, not after it, and
+exactly as a blocked, unknown or malformed one is: the same `404` with the same body and content type on every
+`/order/{token}/...` operation, so nothing tells a caller which it was. `persistence/ResellerLinks.resolve` is
+the single lookup (it also issues tokens) and every reseller service goes through it; the link is resolved
+before an idempotency key is looked up, so a replay through an expired link is a 404 too. Reissuing a blocked
+reseller's link leaves them blocked, and unblocking does not renew an expired link. V9 gives existing links 90
+days from the migration. The owner's reseller operations are one method each in `OwnerResellerResource`
+(`GET/POST /resellers`, `PUT /resellers/{id}`, `POST /resellers/{id}/block`, `/unblock`, `/reissue-link`).
+
 Order history (W3): every successful order action (confirm, cancel by the owner, cancel by the
 reseller, deliver, mark paid) writes one `order_event` row in the transaction that changes the
 order, after the rule check, so a rejected action leaves nothing. An event has the time, the
@@ -186,8 +199,9 @@ Do not log bearer tokens/order links. API responses are `no-store` with no refer
   lock.
 - First sign-in takes a PostgreSQL advisory lock through a native query on the same
   entity manager, so concurrent first calls create one user.
-- Reseller token is stored as a bearer secret so an owner can copy its current link.
-  Protect database backups and keep URL credentials out of logs and analytics.
+- Reseller token is stored as a bearer secret so an owner can copy its current link, and it
+  expires 90 days after issue (ADR 0018). Protect database backups and keep URL credentials out
+  of logs and analytics.
 - Verified Google subjects resolve through `external_identity(provider, subject)`
   to `app_user`; business ownership uses the user ID. First `/me` provisions the
   user idempotently. Profile fields come only from verified token claims; email is
@@ -197,7 +211,7 @@ Do not log bearer tokens/order links. API responses are `no-store` with no refer
   backup validation is included.
 - Rate limiting is not in the API. The deployment spec (sections 5 and 11) puts it at
   the edge: a Cloudflare rule on `/api/order/*`, for example 60 requests a minute per
-  IP. Token probing is already blind, since unknown and blocked tokens are both 404.
+  IP. Token probing is already blind, since unknown, blocked and expired tokens are all the same 404.
 - Local defaults are development credentials only. Set explicit real credentials and
   Google audience before any production use; deployment is a separate authorized task.
 

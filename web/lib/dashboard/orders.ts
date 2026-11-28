@@ -97,13 +97,14 @@ function eventLabel(event: OrderEventView): string {
 
 /**
  * The order's history for its detail page, oldest first. The placement comes from `placedAt`,
- * by the reseller; the rest from the API's events. An order changed before events began has
- * none, so it falls back to its timestamps, which carry no names.
+ * by the reseller, always. The rest comes from the API's events. An order changed before events
+ * began has none, so its later entries fall back to its timestamps, which carry no names.
  */
 export function orderHistory(order: HistorySource): HistoryEntry[] {
+  const placed = { label: "Placed", at: order.placedAt, by: order.resellerName };
   if (order.events.length) {
     return [
-      { label: "Placed", at: order.placedAt, by: order.resellerName },
+      placed,
       ...order.events.map((event) => ({
         label: eventLabel(event),
         at: event.at,
@@ -112,11 +113,10 @@ export function orderHistory(order: HistorySource): HistoryEntry[] {
     ];
   }
   const stamped: [string, string | null][] = [
-    ["Placed", order.placedAt],
     ["Confirmed", order.confirmedAt],
     ["Delivered", order.deliveredAt],
     ["Paid", order.paidAt],
     ["Cancelled", order.cancelledAt],
   ];
-  return stamped.flatMap(([label, at]) => (at ? [{ label, at, by: null }] : []));
+  return [placed, ...stamped.flatMap(([label, at]) => (at ? [{ label, at, by: null }] : []))];
 }

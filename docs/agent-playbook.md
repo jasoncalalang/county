@@ -136,7 +136,7 @@ provided `COUNTY_TEST_JDBC_URL`. Never point tests at production credentials.
 |---|---|---|---|---|
 | W1 | Widen quantities + introduce units | P0 | not started | — (D2: ADR 0017) |
 | W2 | Harden the public order surface | P0 | not started | — (D3: ADR 0018) |
-| W3 | `order_event` (actor-level history) | P0 | not started | — |
+| W3 | `order_event` (actor-level history) | P0 | done (V6 migration) | — |
 | W4 | Rename `purchase_order` → `sales_order` | P0 | done (V5 migration) | — |
 | W5 | Web UI (owner screens + reseller page) | P0 | not started | W3 (order detail history) |
 | W6 | Pagination on orders/products/resellers | P1 | not started | — |

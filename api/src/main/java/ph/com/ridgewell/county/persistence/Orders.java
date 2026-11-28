@@ -109,7 +109,7 @@ public class Orders {
   }
 
   /** A submitted line priced for a reseller: the product as read under its lock. */
-  record PricedLine(Product product, int quantity, BigDecimal price, BigDecimal total) {}
+  record PricedLine(Product product, BigDecimal quantity, BigDecimal price, BigDecimal total) {}
 
   record Priced(List<PricedLine> lines, BigDecimal total) {}
 
@@ -142,7 +142,16 @@ public class Orders {
               : ProductTierPrice.of(reseller.tenantId, product.id, reseller.priceTierId)
                   .map(t -> t.price)
                   .orElse(product.price);
-      var lineTotal = Money.line(unitPrice, line.quantity());
+      if (!Unit.of(product.unit).allows(line.quantity()))
+        throw Problem.field(
+            field + ".quantity",
+            product.name + " is sold by the " + product.unit + ", so enter a whole number");
+      final BigDecimal lineTotal;
+      try {
+        lineTotal = Money.line(unitPrice, line.quantity());
+      } catch (IllegalArgumentException e) {
+        throw Problem.field(field + ".quantity", e.getMessage());
+      }
       total = total.add(lineTotal);
       if (total.compareTo(MAXIMUM) > 0) throw Problem.field("lines", "Order total is too large");
       lines.add(new PricedLine(product, line.quantity(), unitPrice, lineTotal));
@@ -229,7 +238,7 @@ public class Orders {
             "tenantId = ?1 and orderId in ?2", Sort.by("orderId").and("id"), tenant, ids))
       items
           .computeIfAbsent(l.orderId, k -> new ArrayList<>())
-          .add(new Views.OrderItem(l.productName, l.unit, l.quantity));
+          .add(new Views.OrderItem(l.productName, l.unit, Quantity.wire(l.quantity)));
     Map<Long, String> names = resellerNames(tenant, found.stream().map(o -> o.resellerId).toList());
     return found.stream()
         .map(
@@ -289,7 +298,7 @@ public class Orders {
                         (Long) r[0],
                         (String) r[1],
                         (String) r[2],
-                        ((Number) r[3]).longValue(),
+                        Quantity.wire((BigDecimal) r[3]),
                         ((Number) r[4]).longValue()))
             .toList();
     long unconfirmed =
@@ -342,7 +351,12 @@ public class Orders {
             .map(
                 l ->
                     new Views.OrderLine(
-                        l.productId, l.productName, l.unit, l.quantity, l.price, l.total))
+                        l.productId,
+                        l.productName,
+                        l.unit,
+                        Quantity.wire(l.quantity),
+                        l.price,
+                        l.total))
             .toList(),
         events);
   }

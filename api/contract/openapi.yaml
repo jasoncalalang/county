@@ -102,10 +102,10 @@ components:
           format: int64
           exclusiveMinimum: 0
         quantity:
-          type: integer
-          format: int32
+          type: number
           maximum: 9999
-          minimum: 1
+          minimum: 0.001
+          multipleOf: 0.001
     LocalDate:
       type: string
       format: date
@@ -166,8 +166,7 @@ components:
           - kg
           - pc
         quantity:
-          type: integer
-          format: int32
+          type: number
     OrderLineView:
       type: object
       properties:
@@ -179,8 +178,8 @@ components:
         unit:
           type: string
         quantity:
-          type: integer
-          format: int32
+          type: number
+          description: "Up to three decimals, without trailing zeros"
         price:
           type: number
         total:
@@ -372,8 +371,8 @@ components:
         unit:
           type: string
         quantity:
-          type: integer
-          format: int64
+          type: number
+          description: "Sum of the confirmed lines, up to three decimals"
         orderCount:
           type: integer
           format: int64
@@ -429,8 +428,8 @@ components:
           - kg
           - pc
         quantity:
-          type: integer
-          format: int32
+          type: number
+          description: "Up to three decimals, without trailing zeros"
         price:
           type: number
         total:

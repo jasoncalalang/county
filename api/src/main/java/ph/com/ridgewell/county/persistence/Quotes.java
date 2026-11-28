@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
 import ph.com.ridgewell.county.api.*;
+import ph.com.ridgewell.county.domain.Quantity;
 import ph.com.ridgewell.county.domain.QuoteRules;
 import ph.com.ridgewell.county.domain.QuoteRules.Actor;
 import ph.com.ridgewell.county.domain.QuoteRules.Status;
@@ -321,7 +322,12 @@ public class Quotes {
             .map(
                 l ->
                     new Views.QuoteLine(
-                        l.productId, l.productName, l.unit, l.quantity, l.price, l.total))
+                        l.productId,
+                        l.productName,
+                        l.unit,
+                        Quantity.wire(l.quantity),
+                        l.price,
+                        l.total))
             .toList());
   }
 }

@@ -26,7 +26,9 @@ public final class Inputs {
   public record Reseller(@NotBlank @Size(max = 80) String name, @NotBlank String mobile) {}
 
   public record Line(
-      @NotNull @Positive Long productId, @NotNull @Min(1) @Max(9999) Integer quantity) {}
+      @NotNull @Positive Long productId,
+      @NotNull @DecimalMin("0.001") @DecimalMax("9999") @Digits(integer = 4, fraction = 3)
+          BigDecimal quantity) {}
 
   public record Place(
       @NotEmpty @Size(max = 50) List<@NotNull @Valid Line> lines,

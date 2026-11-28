@@ -66,13 +66,15 @@ public final class Views {
       long productId,
       String productName,
       String unit,
-      int quantity,
+      @Schema(description = "Up to three decimals, without trailing zeros") BigDecimal quantity,
       BigDecimal price,
       BigDecimal total) {}
 
   @Schema(name = "OrderItemView", description = "One line of an order, as the order list shows it")
   public record OrderItem(
-      String productName, @Schema(enumeration = {"pack", "kg", "pc"}) String unit, int quantity) {}
+      String productName,
+      @Schema(enumeration = {"pack", "kg", "pc"}) String unit,
+      BigDecimal quantity) {}
 
   @Schema(name = "OrderSummaryView")
   public record OrderSummary(
@@ -144,7 +146,11 @@ public final class Views {
 
   @Schema(name = "ProductionLineView")
   public record ProductionLine(
-      long productId, String productName, String unit, long quantity, long orderCount) {}
+      long productId,
+      String productName,
+      String unit,
+      @Schema(description = "Sum of the confirmed lines, up to three decimals") BigDecimal quantity,
+      long orderCount) {}
 
   @Schema(name = "ProductionRunView")
   public record ProductionRun(
@@ -155,7 +161,7 @@ public final class Views {
       long productId,
       String productName,
       @Schema(enumeration = {"pack", "kg", "pc"}) String unit,
-      int quantity,
+      @Schema(description = "Up to three decimals, without trailing zeros") BigDecimal quantity,
       BigDecimal price,
       BigDecimal total) {}
 

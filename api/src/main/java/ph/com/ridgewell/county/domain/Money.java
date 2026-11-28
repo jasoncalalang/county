@@ -35,7 +35,7 @@ public final class Money {
     if (total.compareTo(ONE_CENTAVO) < 0)
       throw new IllegalArgumentException("A line must come to at least 0.01");
     if (total.compareTo(MAXIMUM) > 0)
-      throw new IllegalArgumentException("Line total exceeds numeric(12,2)");
+      throw new IllegalArgumentException("Line total is too large");
     return total;
   }
 

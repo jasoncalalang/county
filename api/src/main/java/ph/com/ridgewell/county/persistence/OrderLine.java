@@ -25,7 +25,7 @@ public class OrderLine extends PanacheEntityBase {
   public String productName;
 
   public String unit;
-  public int quantity;
+  public BigDecimal quantity;
   public BigDecimal price;
   public BigDecimal total;
 }

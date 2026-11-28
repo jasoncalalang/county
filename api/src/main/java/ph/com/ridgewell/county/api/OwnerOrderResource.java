@@ -5,7 +5,6 @@ import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.*;
 import java.util.List;
-import org.eclipse.microprofile.jwt.JsonWebToken;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import ph.com.ridgewell.county.persistence.OrderActions;
 import ph.com.ridgewell.county.persistence.Orders;
@@ -22,9 +21,7 @@ public class OwnerOrderResource {
   @Inject OrderActions actions;
 
   private String subject() {
-    String s = identity.getPrincipal() instanceof JsonWebToken jwt ? jwt.getSubject() : null;
-    if (s == null || s.isBlank()) throw new Problem(401, "Sign in required");
-    return s;
+    return Subjects.of(identity);
   }
 
   @GET

@@ -22,9 +22,7 @@ public class OwnerResource {
   @Inject Quotes quotes;
 
   private String subject() {
-    String s = identity.getPrincipal() instanceof JsonWebToken jwt ? jwt.getSubject() : null;
-    if (s == null || s.isBlank()) throw new Problem(401, "Sign in required");
-    return s;
+    return Subjects.of(identity);
   }
 
   @GET

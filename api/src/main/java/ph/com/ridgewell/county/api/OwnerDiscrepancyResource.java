@@ -6,7 +6,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Response;
-import org.eclipse.microprofile.jwt.JsonWebToken;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
@@ -23,9 +22,7 @@ public class OwnerDiscrepancyResource {
   @Inject Discrepancies discrepancies;
 
   private String subject() {
-    String s = identity.getPrincipal() instanceof JsonWebToken jwt ? jwt.getSubject() : null;
-    if (s == null || s.isBlank()) throw new Problem(401, "Sign in required");
-    return s;
+    return Subjects.of(identity);
   }
 
   @POST

@@ -1,6 +1,6 @@
 // The demo script of functional spec section 10, against e2e/fake-api.mjs. The Google step is
 // replaced by a minted Auth.js session cookie; everything after sign-in is the real web app.
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Browser, type Page } from "@playwright/test";
 import { encode } from "next-auth/jwt";
 import { E2E_AUTH_SECRET } from "../playwright.config";
 
@@ -346,13 +346,22 @@ test("fractional quantities: kg takes 1.5, a pack does not, and the total rounds
   await context.close();
 });
 
-test("short delivery: the reseller reports 8 of 10 received, with JavaScript off", async ({ browser }) => {
+/** The fake API numbers products, resellers and orders from one counter, so id and number differ. */
+async function orderIdOf(request: APIRequestContext, number: number): Promise<number> {
+  const response = await request.get(`${API}/orders`, { headers: { authorization: "Bearer e2e" } });
+  const found = ((await response.json()) as { id: number; number: number }[]).find((o) => o.number === number);
+  expect(found).toBeDefined();
+  return found!.id;
+}
+
+test("short delivery: the reseller reports 8 of 10 received, with JavaScript off", async ({ browser, request }) => {
   // Order #1 was delivered above: 10 pack of Longganisa Hamonado at 120.00.
+  const id = await orderIdOf(request, 1);
   const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
-  await page.goto(`${link}/orders/1`);
+  await page.goto(`${link}/orders/${id}`);
   await page.getByRole("link", { name: "Report a problem with this delivery" }).click();
-  await expect(page).toHaveURL(`${link}/orders/1/discrepancy`);
+  await expect(page).toHaveURL(`${link}/orders/${id}/discrepancy`);
   await expect(page.getByRole("heading", { name: "Report a problem with order #1" })).toBeVisible();
   await expect(page.getByLabel("Received quantity of Longganisa Hamonado")).toHaveValue("10");
   await expect(page.getByLabel("Received quantity of Tocino")).toHaveValue("5");
@@ -365,7 +374,7 @@ test("short delivery: the reseller reports 8 of 10 received, with JavaScript off
   await page.getByLabel("Note for your supplier (optional)").fill("2 packs were crushed");
   await page.getByRole("button", { name: "Send report" }).click();
 
-  await expect(page).toHaveURL(`${link}/orders/1/discrepancy`);
+  await expect(page).toHaveURL(`${link}/orders/${id}/discrepancy`);
   await expect(page.getByRole("heading", { name: "Delivery report for order #1" })).toBeVisible();
   await expect(page.getByText("Open", { exact: true })).toBeVisible();
   await expect(page.getByRole("cell", { name: "8 of 10 pack" })).toBeVisible();
@@ -375,7 +384,7 @@ test("short delivery: the reseller reports 8 of 10 received, with JavaScript off
   await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
   await shot(page, "16-report-sent");
 
-  await page.goto(`${link}/orders/1`);
+  await page.goto(`${link}/orders/${id}`);
   await expect(page.getByRole("link", { name: "View report" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Report a problem with this delivery" })).toHaveCount(0);
   await context.close();

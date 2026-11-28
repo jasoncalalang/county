@@ -134,7 +134,7 @@ describe("order history", () => {
     expect(orderHistory({ ...placed, events }).at(-1)?.by).toBe("Owner");
   });
 
-  test("without events, it falls back to the order's timestamps and names no one", () => {
+  test("without events, it falls back to the order's timestamps; only the placement names the reseller", () => {
     const order = {
       ...placed,
       confirmedAt: "2026-11-26T03:00:00Z",
@@ -144,7 +144,7 @@ describe("order history", () => {
     };
 
     expect(orderHistory(order)).toEqual([
-      { label: "Placed", at: "2026-11-26T02:00:00Z", by: null },
+      { label: "Placed", at: "2026-11-26T02:00:00Z", by: "Aling Rosa" },
       { label: "Confirmed", at: "2026-11-26T03:00:00Z", by: null },
       { label: "Delivered", at: "2026-11-27T03:00:00Z", by: null },
       { label: "Paid", at: "2026-11-28T03:00:00Z", by: null },
@@ -152,6 +152,12 @@ describe("order history", () => {
     expect(orderHistory({ ...placed, cancelledAt: "2026-11-26T04:00:00Z", events: [] }).map((e) => e.label)).toEqual([
       "Placed",
       "Cancelled",
+    ]);
+  });
+
+  test("a freshly placed order has no events and still shows who placed it", () => {
+    expect(orderHistory({ ...placed, events: [] })).toEqual([
+      { label: "Placed", at: "2026-11-26T02:00:00Z", by: "Aling Rosa" },
     ]);
   });
 });

@@ -15,6 +15,7 @@ import java.util.*;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import ph.com.ridgewell.county.api.*;
 import ph.com.ridgewell.county.domain.PhilippineMobile;
+import ph.com.ridgewell.county.domain.ResellerLink;
 
 @ApplicationScoped
 public class Owners {
@@ -193,6 +194,7 @@ public class Owners {
       reseller = new Reseller();
       reseller.tenantId = tenant;
       reseller.token = token();
+      reseller.tokenExpiresAt = ResellerLink.expiry(Times.now());
     } else
       reseller =
           Reseller.inTenant(tenant, id, PESSIMISTIC_WRITE)
@@ -236,6 +238,7 @@ public class Owners {
         r.status,
         r.token,
         publicUrl.replaceAll("/$", "") + "/order/" + r.token,
+        Times.instant(r.tokenExpiresAt),
         lastOrderAt == null ? null : Times.instant((java.time.Instant) lastOrderAt),
         r.priceTierId);
   }

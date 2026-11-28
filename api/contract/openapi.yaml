@@ -737,6 +737,9 @@ components:
           type: string
         orderLink:
           type: string
+        linkExpiresAt:
+          type: string
+          format: date-time
         lastOrderAt:
           type:
           - string

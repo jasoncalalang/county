@@ -30,7 +30,7 @@ public class Orders {
 
   static Reseller reseller(String token, LockModeType lock) {
     if (token == null || !token.matches("[A-Za-z0-9_-]{22}")) throw new Problem(404, "Not found");
-    return Reseller.byToken(token, lock).orElseThrow(() -> new Problem(404, "Not found"));
+    return Reseller.byToken(token, Times.now(), lock).orElseThrow(() -> new Problem(404, "Not found"));
   }
 
   static LocalDate delivery(Business business) {

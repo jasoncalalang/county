@@ -72,7 +72,9 @@ export type ReportState =
 
 /** 404 is "no report"; any other failed read is a failure the owner can retry. */
 export function reportState(read: ReportRead): ReportState {
-  throw new Error("not implemented");
+  if (read === null) return { kind: "loading" };
+  if ("report" in read) return { kind: "report", report: read.report };
+  return read.status === 404 ? { kind: "none" } : { kind: "failed" };
 }
 
 export function canFile(orderStatus: Status, hasReport: boolean): boolean {

@@ -5,7 +5,16 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import type { DiscrepancyView, OrderView } from "@/lib/api-types";
 import { ApiError, useApi } from "@/lib/dashboard/api";
-import { canFile, canResolve, receivedText, reportTimeline, resolveBody, shortfallText } from "@/lib/discrepancy";
+import {
+  canFile,
+  canResolve,
+  receivedText,
+  reportState,
+  reportTimeline,
+  resolveBody,
+  shortfallText,
+  type ReportRead,
+} from "@/lib/discrepancy";
 import { ReportBadge } from "./badges";
 import { Dialog, DialogActions } from "./dialog";
 import { DiscrepancyForm } from "./discrepancy-form";
@@ -19,8 +28,10 @@ export function DiscrepancySection({ order }: { order: Pick<OrderView, "id" | "n
   const { toast } = useShell();
   const headingId = useId();
   const delivered = order.status === "delivered";
-  // undefined until read; null when the order has no report (the API answers 404).
-  const [report, setReport] = useState<DiscrepancyView | null | undefined>(undefined);
+  // null until the first read answers.
+  const [read, setRead] = useState<ReportRead>(null);
+  const state = reportState(read);
+  const setReport = (report: DiscrepancyView) => setRead({ report });
   const [modal, setModal] = useState<Modal>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -28,12 +39,12 @@ export function DiscrepancySection({ order }: { order: Pick<OrderView, "id" | "n
   const load = useCallback(async () => {
     if (!api.ready || !delivered) return;
     try {
-      setReport(await api.get<DiscrepancyView>(`/orders/${order.id}/discrepancy`));
+      setRead({ report: await api.get<DiscrepancyView>(`/orders/${order.id}/discrepancy`) });
     } catch (error) {
-      if (error instanceof ApiError && error.status === 404) setReport(null);
-      else toast("Could not load the delivery report, try again", "error");
+      // 401 already sent the owner to sign in; anything but 404 shows as a failed read.
+      setRead({ status: error instanceof ApiError ? error.status : 0 });
     }
-  }, [api, order.id, delivered, toast]);
+  }, [api, order.id, delivered]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -66,7 +77,7 @@ export function DiscrepancySection({ order }: { order: Pick<OrderView, "id" | "n
     setModal(next);
   }
 
-  if (!delivered || report === undefined) return null;
+  if (!delivered || state.kind === "loading") return null;
 
   const dialogs = (
     <>
@@ -113,7 +124,23 @@ export function DiscrepancySection({ order }: { order: Pick<OrderView, "id" | "n
     </>
   );
 
-  if (report === null) {
+  if (state.kind === "failed") {
+    return (
+      <section className={ui.report} aria-labelledby={headingId}>
+        <h2 id={headingId} className={ui.heading}>
+          Delivery report
+        </h2>
+        <p className={ui.fieldError} role="alert">
+          The delivery report could not be loaded.
+        </p>
+        <button type="button" className={ui.secondary} style={{ marginTop: 8 }} onClick={load}>
+          Try again
+        </button>
+      </section>
+    );
+  }
+
+  if (state.kind === "none") {
     return (
       <section className={ui.report} aria-labelledby={headingId}>
         <h2 id={headingId} className={ui.heading}>
@@ -130,6 +157,7 @@ export function DiscrepancySection({ order }: { order: Pick<OrderView, "id" | "n
     );
   }
 
+  const { report } = state;
   return (
     <section className={ui.report} aria-labelledby={headingId}>
       <div className={ui.badges}>

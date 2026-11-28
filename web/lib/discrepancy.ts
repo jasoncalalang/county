@@ -61,6 +61,20 @@ export function reportTimeline(report: DiscrepancyView, viewer: DiscrepancyParty
   return lines;
 }
 
+/** What a read of the order's report came back with; null before it has. */
+export type ReportRead = { report: DiscrepancyView } | { status: number } | null;
+
+export type ReportState =
+  | { kind: "loading" }
+  | { kind: "none" }
+  | { kind: "report"; report: DiscrepancyView }
+  | { kind: "failed" };
+
+/** 404 is "no report"; any other failed read is a failure the owner can retry. */
+export function reportState(read: ReportRead): ReportState {
+  throw new Error("not implemented");
+}
+
 export function canFile(orderStatus: Status, hasReport: boolean): boolean {
   return orderStatus === "delivered" && !hasReport;
 }

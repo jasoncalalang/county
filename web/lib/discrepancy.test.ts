@@ -8,6 +8,7 @@ import {
   partyLabel,
   receivedDefaults,
   receivedText,
+  reportState,
   reportTimeline,
   resolveBody,
   shortfallText,
@@ -242,5 +243,25 @@ describe("reportTimeline", () => {
       "You reported this Fri 11:00 AM",
       "Your supplier declined this Sat 9:30 AM",
     ]);
+  });
+});
+
+describe("reportState", () => {
+  const report = { id: 5 } as DiscrepancyView;
+
+  test("nothing read yet is loading", () => {
+    expect(reportState(null)).toEqual({ kind: "loading" });
+  });
+
+  test("a report that was read is the report", () => {
+    expect(reportState({ report })).toEqual({ kind: "report", report });
+  });
+
+  test("a 404 means the order has no report", () => {
+    expect(reportState({ status: 404 })).toEqual({ kind: "none" });
+  });
+
+  test("any other failure is failed, so that the screen can offer a retry", () => {
+    for (const status of [0, 401, 403, 409, 500, 503]) expect(reportState({ status })).toEqual({ kind: "failed" });
   });
 });

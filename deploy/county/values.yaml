@@ -2,6 +2,15 @@
 image:
   registry: ghcr.io/jasoncalalang
 
+ingress:
+  enabled: true
+  className: nginx
+
+# On by default; harmless where the CNI does not enforce it.
+networkPolicy:
+  enabled: true
+  ingressNamespace: ingress-nginx
+
 api:
   replicas: 1
   resources:

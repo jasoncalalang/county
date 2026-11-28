@@ -12,6 +12,7 @@ import org.eclipse.microprofile.openapi.annotations.parameters.RequestBody;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
+import ph.com.ridgewell.county.domain.DiscrepancyRules;
 import ph.com.ridgewell.county.persistence.Discrepancies;
 
 /** The owner's short-delivery reports. Tenant comes from the verified subject. */
@@ -65,8 +66,21 @@ public class OwnerDiscrepancyResource {
   @GET
   @Path("discrepancies")
   public List<Views.DiscrepancySummary> list(@QueryParam("status") String status) {
-    if (status == null && uri.getQueryParameters().containsKey("status"))
-      throw Problem.field("status", "Use open, approved or declined");
-    return discrepancies.list(subject(), status);
+    if (status == null) {
+      if (uri.getQueryParameters().containsKey("status")) throw badStatus();
+      return discrepancies.list(subject());
+    }
+    return discrepancies.listByStatus(subject(), statusFilter(status));
+  }
+
+  /** Statuses are lowercase on the wire: the filter takes exactly those. */
+  private static DiscrepancyRules.Status statusFilter(String value) {
+    for (var status : DiscrepancyRules.Status.values())
+      if (status.wire().equals(value)) return status;
+    throw badStatus();
+  }
+
+  private static Problem badStatus() {
+    return Problem.field("status", "Use open, approved or declined");
   }
 }

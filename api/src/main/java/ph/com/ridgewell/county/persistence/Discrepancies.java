@@ -18,7 +18,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import ph.com.ridgewell.county.api.Inputs;
@@ -105,22 +104,35 @@ public class Discrepancies {
     return resolve(order, input, RESELLER, DECLINED);
   }
 
-  /** The owner's reports, newest first, optionally only those in one status. */
+  private static final String SUMMARIES =
+      "select r, o from DiscrepancyReport r join SalesOrder o"
+          + " on o.tenantId = r.tenantId and o.id = r.orderId where r.tenantId = ?1";
+  private static final String NEWEST_FIRST = " order by r.filedAt desc, r.id desc";
+
+  /** The owner's reports, newest first. */
   @Transactional
-  public List<Views.DiscrepancySummary> list(String subject, String status) {
+  public List<Views.DiscrepancySummary> list(String subject) {
     long tenant = Owners.tenant(subject).id;
-    StringBuilder query =
-        new StringBuilder(
-            "select r, o from DiscrepancyReport r join SalesOrder o"
-                + " on o.tenantId = r.tenantId and o.id = r.orderId where r.tenantId = ?1");
-    Status wanted = status == null ? null : statusValue(status);
-    if (wanted != null) query.append(" and r.status = ?2");
-    query.append(" order by r.filedAt desc, r.id desc");
     var found =
-        DiscrepancyReport.getEntityManager().createQuery(query.toString(), Object[].class);
-    found.setParameter(1, tenant);
-    if (wanted != null) found.setParameter(2, wanted.wire());
-    var rows = found.getResultList();
+        DiscrepancyReport.getEntityManager()
+            .createQuery(SUMMARIES + NEWEST_FIRST, Object[].class)
+            .setParameter(1, tenant);
+    return summaries(tenant, found.getResultList());
+  }
+
+  /** The owner's reports in one status, newest first. */
+  @Transactional
+  public List<Views.DiscrepancySummary> listByStatus(String subject, Status status) {
+    long tenant = Owners.tenant(subject).id;
+    var found =
+        DiscrepancyReport.getEntityManager()
+            .createQuery(SUMMARIES + " and r.status = ?2" + NEWEST_FIRST, Object[].class)
+            .setParameter(1, tenant)
+            .setParameter(2, status.wire());
+    return summaries(tenant, found.getResultList());
+  }
+
+  private static List<Views.DiscrepancySummary> summaries(long tenant, List<Object[]> rows) {
     Map<Long, String> names =
         Orders.resellerNames(
             tenant, rows.stream().map(row -> ((SalesOrder) row[1]).resellerId).toList());
@@ -141,14 +153,6 @@ public class Discrepancies {
                   Times.instant(r.filedAt));
             })
         .toList();
-  }
-
-  private static Status statusValue(String value) {
-    try {
-      return Status.valueOf(value.toUpperCase(Locale.ROOT));
-    } catch (IllegalArgumentException e) {
-      throw Problem.field("status", "Use open, approved or declined");
-    }
   }
 
   /** Resolves the report of a locked order, if the rule lets this party do it. */

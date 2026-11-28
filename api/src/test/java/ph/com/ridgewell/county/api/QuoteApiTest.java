@@ -662,6 +662,49 @@ class QuoteApiTest {
   }
 
   @Test
+  @TestSecurity(user = "quote-fractional", roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "quote-fractional")})
+  void aFractionalQuoteBecomesTheSameOrderLine() {
+    var s = shop("09171230009");
+    long ube =
+        given()
+            .basePath("")
+            .contentType("application/json")
+            .body("{\"name\":\"Ube\",\"unit\":\"kg\",\"price\":99.99}")
+            .post("/api/products")
+            .then()
+            .statusCode(201)
+            .extract()
+            .jsonPath()
+            .getLong("id");
+    // 99.99 x 1.5 = 149.985, which is 149.99 half up.
+    long id = draft(s, "[" + line(s.product(), 2) + ",{\"productId\":" + ube + ",\"quantity\":1.5}]");
+    given()
+        .basePath("")
+        .get("/api/quotes/" + id)
+        .then()
+        .body("lines.quantity", contains(2, 1.5f))
+        .body("lines.total", contains(240.0f, 149.99f))
+        .body("total", is(389.99f));
+    given().basePath("").post("/api/quotes/" + id + "/send").then().statusCode(200);
+    // A later price change must not reach the accepted order, and nothing is rounded again.
+    given()
+        .basePath("")
+        .contentType("application/json")
+        .body("{\"name\":\"Ube\",\"unit\":\"kg\",\"price\":100}")
+        .put("/api/products/" + ube)
+        .then()
+        .statusCode(200);
+    accept(s.token(), id, UUID.randomUUID())
+        .then()
+        .statusCode(201)
+        .body("lines.quantity", contains(2, 1.5f))
+        .body("lines.price", contains(120.0f, 99.99f))
+        .body("lines.total", contains(240.0f, 149.99f))
+        .body("total", is(389.99f));
+  }
+
+  @Test
   void quoteEndpointsRequireAuthentication() {
     given().basePath("").get("/api/quotes").then().statusCode(401);
     given().basePath("").contentType("application/json").body("{}").post("/api/quotes").then().statusCode(401);

@@ -157,6 +157,12 @@ features in this order: price tiers, quotes, receive-with-discrepancy, MOQ + ord
 W10 is the first of them. The other four are specified in the architecture repository's Beyond-v1 build
 plan, not in this queue.
 
+Feature 3, receive-with-discrepancy, is built, API and web: a delivered order takes one short-delivery
+report from the reseller (on their order link, no JavaScript needed) or the owner (on the order detail),
+which the other party approves or declines; the owner's open reports are listed under Delivery reports.
+The plan is `docs/superpowers/plans/2026-11-28-short-delivery-reports.md`; the API rules are in
+`api/README.md`. A report has no money effect: the order never changes.
+
 ---
 
 ## 4. Work items

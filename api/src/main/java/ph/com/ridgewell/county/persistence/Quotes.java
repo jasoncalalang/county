@@ -6,6 +6,7 @@ import static jakarta.persistence.LockModeType.PESSIMISTIC_WRITE;
 
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
@@ -28,6 +29,8 @@ import ph.com.ridgewell.county.domain.QuoteRules.Status;
  */
 @ApplicationScoped
 public class Quotes {
+  @Inject Orders orders;
+
   public record Acceptance(boolean replay, Views.Order order) {}
 
   private static LocalDate today() {
@@ -232,7 +235,7 @@ public class Quotes {
       throw new Problem(409, "Idempotency key already used");
     if (q.acceptedOrderId != null)
       return new Acceptance(
-          true, Orders.view(SalesOrder.<SalesOrder>findById(q.acceptedOrderId)));
+          true, orders.resellerView(SalesOrder.<SalesOrder>findById(q.acceptedOrderId)));
     move(q, Status.ACCEPTED, Actor.RESELLER);
     List<QuoteLine> quoted =
         QuoteLine.list("tenantId = ?1 and quoteId = ?2", Sort.by("id"), q.tenantId, q.id);

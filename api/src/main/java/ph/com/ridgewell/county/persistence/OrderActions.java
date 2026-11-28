@@ -57,7 +57,7 @@ public class OrderActions {
     order.cancelledAt = at;
     history.byReseller(order, from, CANCELLED, reseller.id, at);
     SalesOrder.flush();
-    return Orders.view(order);
+    return orders.resellerView(order);
   }
 
   @Transactional

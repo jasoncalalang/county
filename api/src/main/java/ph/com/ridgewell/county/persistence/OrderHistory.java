@@ -51,6 +51,16 @@ public class OrderHistory {
     return event;
   }
 
+  private static Views.OrderEvent view(Object[] row) {
+    return new Views.OrderEvent(
+        Times.instant((Instant) row[0]),
+        (String) row[1],
+        (String) row[2],
+        (Boolean) row[3],
+        (String) row[4],
+        (String) row[5]);
+  }
+
   /** The order's events, oldest first, as the owner sees them: with the actor's name. */
   public List<Views.OrderEvent> forOwner(SalesOrder order) {
     return OrderEvent.getEntityManager()
@@ -65,15 +75,29 @@ public class OrderHistory {
         .setParameter(2, order.id)
         .getResultList()
         .stream()
-        .map(
-            r ->
-                new Views.OrderEvent(
-                    Times.instant((Instant) r[0]),
-                    (String) r[1],
-                    (String) r[2],
-                    (Boolean) r[3],
-                    (String) r[4],
-                    (String) r[5]))
+        .map(OrderHistory::view)
+        .toList();
+  }
+
+  /**
+   * The order's events, oldest first, as its reseller sees them: the reseller's own name, and the
+   * business name for what the owner did. No owner name, email or id.
+   */
+  public List<Views.OrderEvent> forReseller(SalesOrder order) {
+    String business = Business.<Business>findById(order.tenantId).name;
+    return OrderEvent.getEntityManager()
+        .createQuery(
+            "select e.occurredAt, e.fromStatus, e.toStatus, e.paid, e.actorType,"
+                + " coalesce(r.name, ?3) from OrderEvent e"
+                + " left join Reseller r on r.tenantId = e.tenantId and r.id = e.actorResellerId"
+                + " where e.tenantId = ?1 and e.orderId = ?2 order by e.occurredAt, e.id",
+            Object[].class)
+        .setParameter(1, order.tenantId)
+        .setParameter(2, order.id)
+        .setParameter(3, business)
+        .getResultList()
+        .stream()
+        .map(OrderHistory::view)
         .toList();
   }
 }

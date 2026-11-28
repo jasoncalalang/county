@@ -105,7 +105,7 @@ public class Orders {
   @Transactional
   public Views.Order getPublic(String token, long id) {
     var reseller = reseller(token, NONE);
-    return view(order(reseller.tenantId, id, reseller.id, NONE));
+    return resellerView(order(reseller.tenantId, id, reseller.id, NONE));
   }
 
   /** A submitted line priced for a reseller: the product as read under its lock. */
@@ -165,7 +165,7 @@ public class Orders {
       // A key used by another reseller of this business must not reveal that order.
       if (existing.get().resellerId != reseller.id)
         throw new Problem(409, "Idempotency key already used");
-      return new Placement(true, view(existing.get()));
+      return new Placement(true, resellerView(existing.get()));
     }
     var priced = price(reseller, input.lines());
     List<OrderLine> lines = new ArrayList<>();
@@ -312,8 +312,9 @@ public class Orders {
     return view(o, lines(o), history.forOwner(o));
   }
 
-  static Views.Order view(SalesOrder o) {
-    return view(o, lines(o));
+  /** An order as its reseller sees it: the history names the business, never the owner. */
+  Views.Order resellerView(SalesOrder o) {
+    return view(o, lines(o), history.forReseller(o));
   }
 
   static Views.Order view(SalesOrder o, List<OrderLine> lines) {

@@ -41,3 +41,37 @@ CREATE TABLE discrepancy_line (
  FOREIGN KEY (tenant_id, product_id) REFERENCES product(tenant_id, id),
  UNIQUE (report_id, product_id)
 );
+
+-- A report is a record: nothing removes it or its lines, a line never changes, and a report changes
+-- only by being resolved, once, with what was captured at filing left as it was.
+CREATE FUNCTION discrepancy_line_append_only() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'discrepancy_line is append-only';
+END;
+$$;
+CREATE TRIGGER discrepancy_line_append_only BEFORE UPDATE OR DELETE ON discrepancy_line
+  FOR EACH ROW EXECUTE FUNCTION discrepancy_line_append_only();
+
+CREATE FUNCTION discrepancy_report_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'discrepancy_report cannot be deleted';
+  END IF;
+  IF OLD.status <> 'open' THEN
+    RAISE EXCEPTION 'a resolved discrepancy_report cannot change';
+  END IF;
+  IF NEW.status = 'open' THEN
+    RAISE EXCEPTION 'a discrepancy_report changes only by being resolved';
+  END IF;
+  IF ROW(NEW.id, NEW.tenant_id, NEW.order_id, NEW.filed_by, NEW.filed_at, NEW.note,
+         NEW.shortfall_total, NEW.idempotency_key)
+     IS DISTINCT FROM
+     ROW(OLD.id, OLD.tenant_id, OLD.order_id, OLD.filed_by, OLD.filed_at, OLD.note,
+         OLD.shortfall_total, OLD.idempotency_key) THEN
+    RAISE EXCEPTION 'resolving a discrepancy_report does not change what was filed';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER discrepancy_report_guard BEFORE UPDATE OR DELETE ON discrepancy_report
+  FOR EACH ROW EXECUTE FUNCTION discrepancy_report_guard();

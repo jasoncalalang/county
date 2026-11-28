@@ -707,11 +707,13 @@ button:disabled {
 }
 
 /* Quote statuses. A sent quote waits on the reseller, as a confirmed order waits on delivery. */
-.sent {
+.sent,
+.open {
   color: var(--confirmed-ink);
   background: var(--confirmed-ground);
 }
-.accepted {
+.accepted,
+.approved {
   color: var(--delivered-ink);
   background: var(--delivered-ground);
 }
@@ -775,4 +777,9 @@ button:disabled {
 .field select[aria-invalid="true"],
 .field textarea[aria-invalid="true"] {
   border-color: var(--danger);
+}
+
+/* Short-delivery report on the order detail */
+.report {
+  margin-top: 24px;
 }

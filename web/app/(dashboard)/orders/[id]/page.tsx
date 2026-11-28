@@ -8,6 +8,7 @@ import { ApiError, useApi } from "@/lib/dashboard/api";
 import { orderHistory } from "@/lib/dashboard/orders";
 import { formatDayTime, formatLongDate, formatMobile, formatMoney } from "@/lib/format";
 import { PaidBadge, StatusBadge } from "../../_components/badges";
+import { DiscrepancySection } from "../../_components/discrepancy-section";
 import { useOrderActions } from "../../_components/order-actions";
 import { Placeholder } from "../../_components/shell";
 import ui from "../../../ui.module.css";
@@ -103,6 +104,7 @@ export default function OrderDetailPage() {
             </tfoot>
           </table>
           {order.note && <blockquote className={ui.quote}>{order.note}</blockquote>}
+          <DiscrepancySection order={order} />
         </section>
 
         <aside className={ui.card}>

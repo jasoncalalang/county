@@ -7,7 +7,7 @@ import type {
   OrderLineView,
   Unit,
 } from "./api-types";
-import { formatMoney, type Status } from "./format";
+import { formatDayTime, formatMoney, type Status } from "./format";
 import { parseQuantity } from "./quantity";
 
 export const DISCREPANCY_STATUS_LABEL: Record<DiscrepancyStatus, string> = {
@@ -53,7 +53,12 @@ export function receivedText(line: { orderedQuantity: number; receivedQuantity: 
 
 /** "The reseller reported this Fri 11:00 AM", then how it was answered, from the viewer's side. */
 export function reportTimeline(report: DiscrepancyView, viewer: DiscrepancyParty): string[] {
-  throw new Error("not implemented");
+  const lines = [`${partyLabel(report.filedBy, viewer)} reported this ${formatDayTime(report.filedAt)}`];
+  if (report.resolvedBy && report.resolvedAt) {
+    const did = report.status === "approved" ? "approved" : "declined";
+    lines.push(`${partyLabel(report.resolvedBy, viewer)} ${did} this ${formatDayTime(report.resolvedAt)}`);
+  }
+  return lines;
 }
 
 export function canFile(orderStatus: Status, hasReport: boolean): boolean {

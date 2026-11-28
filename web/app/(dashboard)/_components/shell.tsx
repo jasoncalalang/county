@@ -31,6 +31,7 @@ export function useShell(): ShellValue {
 const NAV = [
   { href: "/orders", label: "Orders" },
   { href: "/quotes", label: "Quotes" },
+  { href: "/discrepancies", label: "Delivery reports" },
   { href: "/production-run", label: "Production run" },
   { href: "/resellers", label: "Resellers" },
   { href: "/products", label: "Products" },

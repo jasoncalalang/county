@@ -600,7 +600,7 @@ class DiscrepancyApiTest {
         .body("resolvedBy", is("owner"))
         .body("resolutionNote", is("Counted twice at the door"));
 
-    // The body is optional: with none at all the note stays empty.
+    // The body is optional: an empty one, sent as JSON, leaves the note empty.
     resolveAsOwner(bare.id(), "approve", null)
         .then()
         .statusCode(200)

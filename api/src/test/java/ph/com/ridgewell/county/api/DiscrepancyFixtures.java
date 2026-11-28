@@ -188,10 +188,10 @@ final class DiscrepancyFixtures {
     return "/api/orders/" + order + "/discrepancy";
   }
 
+  /** A JSON POST; a null body sends the JSON content type and nothing else. */
   private static Response post(String path, String body) {
-    var request = given().basePath("");
-    return (body == null ? request : request.contentType("application/json").body(body))
-        .post(path);
+    var request = given().basePath("").contentType("application/json");
+    return (body == null ? request : request.body(body)).post(path);
   }
 
   static Response fileAsReseller(String token, long order, String body) {
@@ -210,7 +210,7 @@ final class DiscrepancyFixtures {
     return given().basePath("").get(owner(order));
   }
 
-  /** A resolution: {@code action} is approve or decline. A null body sends no body at all. */
+  /** A resolution: {@code action} is approve or decline. */
   static Response resolveAsOwner(long order, String action, String body) {
     return post(owner(order) + "/" + action, body);
   }

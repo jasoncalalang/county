@@ -65,4 +65,8 @@ public final class Inputs {
           LocalDate expiresOn) {}
 
   public record AcceptQuote(@NotNull UUID idempotencyKey) {}
+
+  public record DiscrepancyLine(Long productId, BigDecimal receivedQuantity) {}
+
+  public record Discrepancy(List<DiscrepancyLine> lines, String note, UUID idempotencyKey) {}
 }

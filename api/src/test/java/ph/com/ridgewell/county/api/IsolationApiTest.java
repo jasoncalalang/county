@@ -124,6 +124,61 @@ class IsolationApiTest {
   }
 
   @Test
+  @TestSecurity(
+      user = "isolation-link-b",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "isolation-link-b")})
+  void anotherTenantCannotReissueOrSeeALink() throws SQLException {
+    Fixture own = fixture("isolation-link-b");
+    Fixture other = fixture("link-a-" + UUID.randomUUID());
+    Object expiry;
+    try (var c = dataSource.getConnection()) {
+      expiry =
+          TestSql.one(c, "SELECT token_expires_at AS at FROM reseller WHERE id=?", other.reseller)
+              .get("at");
+    }
+
+    given()
+        .basePath("")
+        .post("/api/resellers/" + other.reseller + "/reissue-link")
+        .then()
+        .statusCode(404);
+
+    try (var c = dataSource.getConnection()) {
+      var row =
+          TestSql.one(
+              c, "SELECT token, token_expires_at AS at FROM reseller WHERE id=?", other.reseller);
+      assertEquals(other.token, row.get("token"));
+      assertEquals(expiry, row.get("at"));
+    }
+    String list =
+        given()
+            .basePath("")
+            .get("/api/resellers")
+            .then()
+            .statusCode(200)
+            .body("id", hasItem((int) own.reseller))
+            .body("id", not(hasItem((int) other.reseller)))
+            .extract()
+            .asString();
+    assertFalse(list.contains(other.token));
+    given().basePath("").get("/api/order/" + other.token).then().statusCode(200);
+  }
+
+  @Test
+  void reissuingALinkRequiresSignIn() throws SQLException {
+    Fixture f = fixture("link-anon-" + UUID.randomUUID());
+
+    given()
+        .basePath("")
+        .post("/api/resellers/" + f.reseller + "/reissue-link")
+        .then()
+        .statusCode(401);
+
+    given().basePath("").get("/api/order/" + f.token).then().statusCode(200);
+  }
+
+  @Test
   void publicOrderingDoesNotRequireOwnerAuthenticationAndResellersAreIsolated()
       throws SQLException {
     Fixture f = fixture("public-" + UUID.randomUUID());

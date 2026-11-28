@@ -271,4 +271,126 @@ class ResellerLinkApiTest {
 
     assertEquals(before, expiryOf(r.token));
   }
+
+  private static io.restassured.path.json.JsonPath action(long reseller, String action) {
+    return given()
+        .basePath("")
+        .post("/api/resellers/" + reseller + "/" + action)
+        .then()
+        .statusCode(200)
+        .extract()
+        .jsonPath();
+  }
+
+  @Test
+  @TestSecurity(
+      user = "link-reissue",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "link-reissue")})
+  void reissuingGivesANewTokenAndAFreshNinetyDaysEvenAfterExpiry() throws SQLException {
+    var reseller = newReseller();
+    long id = reseller.getLong("id");
+    String old = reseller.getString("token");
+    expire(old);
+
+    var reissued = action(id, "reissue-link");
+
+    String token = reissued.getString("token");
+    assertNotNull(reissued.getString("linkExpiresAt"));
+    assertAboutNinetyDaysAhead(Instant.parse(reissued.getString("linkExpiresAt")));
+    assertTrue(token.matches("[A-Za-z0-9_-]{22}"), token);
+    assertNotEquals(old, token);
+    assertTrue(reissued.getString("orderLink").endsWith("/order/" + token));
+    given().basePath("").get("/api/order/" + old).then().statusCode(404);
+    given().basePath("").get("/api/order/" + token).then().statusCode(200);
+  }
+
+  @Test
+  @TestSecurity(
+      user = "link-unblock",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "link-unblock")})
+  void unblockingDoesNotRenewOrReviveAnExpiredLink() throws SQLException {
+    var reseller = newReseller();
+    long id = reseller.getLong("id");
+    String token = reseller.getString("token");
+    expire(token);
+    Instant expired = expiryOf(token);
+    action(id, "block");
+
+    var unblocked = action(id, "unblock");
+
+    assertEquals("invited", unblocked.getString("status"));
+    assertEquals(expired, Instant.parse(unblocked.getString("linkExpiresAt")));
+    assertEquals(expired, expiryOf(token));
+    assertEquals(token, unblocked.getString("token"));
+    given().basePath("").get("/api/order/" + token).then().statusCode(404);
+  }
+
+  @Test
+  @TestSecurity(
+      user = "link-blocked-reissue",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "link-blocked-reissue")})
+  void reissuingABlockedResellersLinkLeavesThemBlocked() {
+    var reseller = newReseller();
+    long id = reseller.getLong("id");
+    action(id, "block");
+
+    var reissued = action(id, "reissue-link");
+
+    assertEquals("blocked", reissued.getString("status"));
+    String token = reissued.getString("token");
+    given().basePath("").get("/api/order/" + token).then().statusCode(404);
+    assertEquals("invited", action(id, "unblock").getString("status"));
+    given().basePath("").get("/api/order/" + token).then().statusCode(200);
+  }
+
+  @Test
+  @TestSecurity(
+      user = "link-body",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "link-body")})
+  void aBodyCannotSetOrExtendTheExpiry() throws SQLException {
+    given()
+        .basePath("")
+        .contentType(JSON)
+        .body("{\"name\":\"Nena\",\"cutoff\":\"16:00\",\"deliveryDays\":[1,2,3,4,5,6,7]}")
+        .post("/api/tenants")
+        .then()
+        .statusCode(201);
+    String far = "\"linkExpiresAt\":\"2099-01-01T00:00:00Z\",\"tokenExpiresAt\":\"2099-01-01T00:00:00Z\"";
+
+    var created =
+        given()
+            .basePath("")
+            .contentType(JSON)
+            .body("{\"name\":\"Rosa\",\"mobile\":\"09171234567\"," + far + "}")
+            .post("/api/resellers")
+            .then()
+            .statusCode(201)
+            .extract()
+            .jsonPath();
+    String token = created.getString("token");
+    assertNotNull(created.getString("linkExpiresAt"));
+    assertAboutNinetyDaysAhead(Instant.parse(created.getString("linkExpiresAt")));
+
+    expire(token);
+    Instant expired = expiryOf(token);
+    var updated =
+        given()
+            .basePath("")
+            .contentType(JSON)
+            .body("{\"name\":\"Rosa B\",\"mobile\":\"09171234567\"," + far + "}")
+            .put("/api/resellers/" + created.getLong("id"))
+            .then()
+            .statusCode(200)
+            .extract()
+            .jsonPath();
+
+    assertEquals("Rosa B", updated.getString("name"));
+    assertEquals(expired, expiryOf(token));
+    assertEquals(expired, Instant.parse(updated.getString("linkExpiresAt")));
+    given().basePath("").get("/api/order/" + token).then().statusCode(404);
+  }
 }

@@ -4,7 +4,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 
-const DASHBOARD = ["/setup", "/orders", "/production-run", "/resellers", "/products", "/settings"];
+const DASHBOARD = ["/setup", "/orders", "/quotes", "/production-run", "/resellers", "/products", "/settings"];
 
 export default auth((request) => {
   const { pathname } = request.nextUrl;
@@ -21,5 +21,5 @@ export default auth((request) => {
 });
 
 export const config = {
-  matcher: ["/", "/setup", "/orders/:path*", "/production-run", "/resellers", "/products", "/settings"],
+  matcher: ["/", "/setup", "/orders/:path*", "/quotes/:path*", "/production-run", "/resellers", "/products", "/settings"],
 };

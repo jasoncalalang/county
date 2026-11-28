@@ -1,7 +1,7 @@
 // The reseller's pages (interface design, section 7). Every page is a full HTML document with
 // the stylesheet and the optional script inlined; every action is a link or a form post.
-import type { CatalogView, OrderView } from "../api-types";
-import { formatClock, formatMoney, formatShortDate, STATUS_LABEL, type Status } from "../format";
+import type { CatalogView, OrderView, QuoteStatus, QuoteSummaryView, QuoteView } from "../api-types";
+import { formatClock, formatMoney, formatShortDate, QUOTE_STATUS_LABEL, quoteNumber, STATUS_LABEL, type Status } from "../format";
 import { html, raw, type Html } from "./html";
 import { ORDER_PAGE_SCRIPT } from "./script";
 import { ORDER_PAGE_CSS } from "./styles";
@@ -12,6 +12,14 @@ function page(title: string, body: Html, withScript = true): string {
 
 function badge(status: Status): Html {
   return html`<span class="badge ${status}">${STATUS_LABEL[status]}</span>`;
+}
+
+function quoteBadge(status: QuoteStatus): Html {
+  return html`<span class="badge ${status}">${QUOTE_STATUS_LABEL[status]}</span>`;
+}
+
+function quotePath(token: string, id: number): string {
+  return `${orderPath(token)}/quotes/${id}`;
 }
 
 function orderPath(token: string, id?: number): string {
@@ -41,6 +49,7 @@ export function priceListPage(
   catalog: CatalogView,
   idempotencyKey: string,
   state: FormState = EMPTY_FORM,
+  quotes: QuoteSummaryView[] = [],
 ): string {
   const bad = new Set(state.errors.flatMap((e) => (e.productId === undefined ? [] : [e.productId])));
   const errors = state.errors.length
@@ -62,6 +71,13 @@ export function priceListPage(
 </form>`
     : html`<p class="card">No products available yet. Please contact your supplier.</p>`;
 
+  const offers = quotes.length
+    ? html`<h2>Quotes for you</h2><ul class="recent">${quotes.map(
+        (q) =>
+          html`<li><a href="${quotePath(token, q.id)}" class="num">${quoteNumber(q.number)} · ${formatMoney(q.total)} · accept by ${formatShortDate(q.expiresOn)}</a></li>`,
+      )}</ul>`
+    : "";
+
   const recent = catalog.recentOrders.length
     ? html`<h2>Your recent orders</h2><ul class="recent">${catalog.recentOrders.map(
         (o) =>
@@ -73,7 +89,7 @@ export function priceListPage(
     catalog.businessName,
     html`<header><h1>${catalog.businessName}</h1><p class="small">Ordering as ${catalog.resellerName}</p></header>
 <div class="banner"><strong>Delivery on ${formatShortDate(catalog.deliveryDate)}</strong><span class="small">Orders placed after ${formatClock(catalog.cutoff)} go to the next delivery day.</span></div>
-${errors}${form}${recent}`,
+${offers}${errors}${form}${recent}`,
   );
 }
 
@@ -126,6 +142,66 @@ export function unavailablePage(token: string): string {
   return page(
     "Please try again",
     html`<div class="errors" role="alert"><p>Could not reach your supplier's price list. Please try again.</p></div><a class="back" href="${orderPath(token)}">← Back to price list</a>`,
+    false,
+  );
+}
+
+/**
+ * A quote on the reseller's link. `catalog` gives the business name and the delivery date an
+ * order placed now gets, which is the date accepting gives (the quote's own date is the
+ * estimate from when it was made). `notice` reports a refused accept or decline.
+ */
+export function quotePage(
+  token: string,
+  catalog: Pick<CatalogView, "businessName" | "deliveryDate">,
+  quote: QuoteView,
+  idempotencyKey: string,
+  notice?: string,
+): string {
+  const label = quoteNumber(quote.number);
+  const outcome: Record<Exclude<QuoteStatus, "sent">, Html> = {
+    accepted: html`<p>You accepted this quote.${
+      quote.acceptedOrderId ? html` <a href="${orderPath(token, quote.acceptedOrderId)}">See your order</a>` : ""
+    }</p>`,
+    declined: html`<p>You declined this quote.</p>`,
+    expired: html`<p>This quote ended on ${formatShortDate(quote.expiresOn)}. Ask your supplier for a new one.</p>`,
+    cancelled: html`<p>Your supplier withdrew this quote.</p>`,
+    draft: html`<p>This quote is not ready yet.</p>`,
+  };
+  const sent = quote.status === "sent";
+  return page(
+    `Quote ${label}`,
+    html`<header><h1>${catalog.businessName}</h1></header>
+${notice ? html`<p class="errors" role="alert">${notice}</p>` : ""}<div class="card">
+<h1 class="title">Quote ${label}</h1>
+<p>${quoteBadge(quote.status)}${sent ? html` <span class="small">Accept by ${formatShortDate(quote.expiresOn)}</span>` : ""}</p>
+<table><thead><tr><th scope="col">Product</th><th scope="col" class="r">Qty × price</th><th scope="col" class="r">Total</th></tr></thead>
+<tbody>${quote.lines.map(
+      (l) =>
+        html`<tr><td>${l.productName}</td><td class="r">${l.quantity} ${l.unit} × ${formatMoney(l.price)}</td><td class="r">${formatMoney(l.total)}</td></tr>`,
+    )}</tbody>
+<tfoot><tr><td colspan="2">Total</td><td class="r">${formatMoney(quote.total)}</td></tr></tfoot></table>
+${quote.note ? html`<p class="small">Note from your supplier</p><blockquote>${quote.note}</blockquote>` : ""}
+${
+  quote.status === "sent"
+    ? html`<p class="small">Accepting places this order at these prices, for delivery on ${formatShortDate(catalog.deliveryDate)}.</p>
+<div class="actions"><form method="post" action="${quotePath(token, quote.id)}/accept"><input type="hidden" name="idempotencyKey" value="${idempotencyKey}"><button class="primary" type="submit">Accept and place order</button></form>
+<form method="post" action="${quotePath(token, quote.id)}/decline" data-confirm="Decline quote ${label}?"><button class="text danger" type="submit">Decline</button></form></div>`
+    : outcome[quote.status]
+}
+</div>
+<a class="back" href="${orderPath(token)}">← Back to price list</a>`,
+  );
+}
+
+/** The one-button confirmation shown when decline is posted without the script. */
+export function confirmDeclinePage(token: string, quote: { id: number; number: number }): string {
+  const label = quoteNumber(quote.number);
+  return page(
+    `Decline quote ${label}?`,
+    html`<div class="card"><h1>Decline quote ${label}?</h1><p class="small">Your supplier will see that you declined.</p>
+<form method="post" action="${quotePath(token, quote.id)}/decline"><input type="hidden" name="confirmed" value="yes"><p><button class="primary" type="submit">Decline quote</button></p></form></div>
+<a class="back" href="${quotePath(token, quote.id)}">← Keep the quote</a>`,
     false,
   );
 }

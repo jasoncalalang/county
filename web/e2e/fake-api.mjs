@@ -8,7 +8,7 @@ const port = Number(process.env.FAKE_API_PORT ?? 3199);
 let db;
 
 function reset() {
-  db = { tenant: null, products: [], resellers: [], orders: [], nextId: 1, nextNumber: 1, keys: new Map() };
+  db = { tenant: null, products: [], resellers: [], orders: [], quotes: [], nextId: 1, nextNumber: 1, nextQuote: 1, keys: new Map() };
 }
 reset();
 
@@ -63,6 +63,15 @@ function transition(o, target, actor, paid) {
   return true;
 }
 
+const manilaToday = () => new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
+/** Expiry is read, not stored: a sent quote past its last day is expired. */
+const quoteStatus = (q) => (q.status === "sent" && manilaToday() > q.expiresOn ? "expired" : q.status);
+function quoteSummary(q) {
+  const { id, number, resellerId, createdAt, deliveryDate, expiresOn, total } = q;
+  return { id, number, resellerId, resellerName: resellerName(q), createdAt, deliveryDate, expiresOn, status: quoteStatus(q), total };
+}
+const quoteView = (q) => ({ ...q, ...quoteSummary(q), lines: q.lines.map((l) => ({ ...l })) });
+
 async function body(req) {
   let text = "";
   for await (const chunk of req) text += chunk;
@@ -76,6 +85,49 @@ createServer(async (req, res) => {
   let x;
   try {
     if (req.method === "POST" && path === "/__reset") return reset(), send(res, 204);
+
+    // Reseller (token) quote routes
+    if ((x = m(/^\/order\/([^/]+)\/quotes(?:\/(\d+)(?:\/(accept|decline))?)?$/))) {
+      const reseller = db.resellers.find((r) => r.token === x[1] && r.status !== "blocked");
+      if (!reseller) return problem(res, 404, "Not found");
+      if (!x[2]) {
+        const open = db.quotes.filter((q) => q.resellerId === reseller.id && quoteStatus(q) === "sent");
+        return send(res, 200, open.reverse().map(quoteSummary));
+      }
+      const q = db.quotes.find((y) => y.id === Number(x[2]) && y.resellerId === reseller.id && y.sentAt);
+      if (!q) return problem(res, 404, "Not found");
+      if (!x[3] && req.method === "GET") return send(res, 200, quoteView(q));
+      if (x[3] === "decline") {
+        if (quoteStatus(q) !== "sent") return problem(res, 409, `Quote is now ${quoteStatus(q)}`);
+        Object.assign(q, { status: "declined", declinedAt: now() });
+        return send(res, 200, quoteView(q));
+      }
+      const input = await body(req);
+      if (q.acceptedOrderId) return send(res, 200, orderView(db.orders.find((o) => o.id === q.acceptedOrderId)));
+      if (quoteStatus(q) !== "sent") return problem(res, 409, `Quote is now ${quoteStatus(q)}`);
+      const order = {
+        id: db.nextId++,
+        number: db.nextNumber++,
+        resellerId: reseller.id,
+        placedAt: now(),
+        deliveryDate: deliveryDate(),
+        status: "placed",
+        total: q.total,
+        paid: false,
+        note: "",
+        confirmedAt: null,
+        deliveredAt: null,
+        cancelledAt: null,
+        paidAt: null,
+        lines: q.lines.map((l) => ({ ...l })),
+      };
+      db.orders.push(order);
+      db.keys.set(input.idempotencyKey, order);
+      Object.assign(q, { status: "accepted", acceptedAt: now(), acceptedOrderId: order.id });
+      reseller.status = "active";
+      reseller.lastOrderAt = order.placedAt;
+      return send(res, 201, orderView(order));
+    }
 
     // Reseller (token) routes
     if ((x = m(/^\/order\/([^/]+)(\/orders(?:\/(\d+)(\/cancel)?)?)?$/))) {
@@ -218,6 +270,58 @@ createServer(async (req, res) => {
       const input = x[2] === "deliver" ? await body(req) : undefined;
       if (!transition(o, target, "owner", input?.paid)) return problem(res, 409, `Order is now ${o.status}`);
       return send(res, 200, orderView(o));
+    }
+    if (path === "/quotes" && req.method === "POST") {
+      const input = await body(req);
+      const r = db.resellers.find((y) => y.id === input.resellerId);
+      if (!r) return problem(res, 404, "Not found");
+      if (r.status === "blocked") return field(res, "resellerId", "This reseller is blocked");
+      if (!input.expiresOn || input.expiresOn < manilaToday()) return field(res, "expiresOn", "Choose today or a later day");
+      const lines = [];
+      for (const line of input.lines) {
+        const p = db.products.find((y) => y.id === line.productId);
+        if (!p) return problem(res, 404, "Not found");
+        lines.push({ productId: p.id, productName: p.name, unit: p.unit, quantity: line.quantity, price: p.price, total: p.price * line.quantity });
+      }
+      const q = {
+        id: db.nextId++,
+        number: db.nextQuote++,
+        resellerId: r.id,
+        createdAt: now(),
+        deliveryDate: deliveryDate(),
+        expiresOn: input.expiresOn,
+        status: "draft",
+        total: lines.reduce((sum, l) => sum + l.total, 0),
+        note: input.note ?? "",
+        acceptedOrderId: null,
+        sentAt: null,
+        acceptedAt: null,
+        declinedAt: null,
+        cancelledAt: null,
+        lines,
+      };
+      db.quotes.push(q);
+      return send(res, 201, quoteView(q));
+    }
+    if (path === "/quotes") {
+      const status = url.searchParams.get("status");
+      const reseller = url.searchParams.get("resellerId");
+      const found = db.quotes.filter((q) => (!status || quoteStatus(q) === status) && (!reseller || q.resellerId === Number(reseller)));
+      return send(res, 200, [...found].reverse().map(quoteSummary));
+    }
+    if ((x = m(/^\/quotes\/(\d+)(?:\/(send|cancel))?$/))) {
+      const q = db.quotes.find((y) => y.id === Number(x[1]));
+      if (!q) return problem(res, 404, "Not found");
+      if (!x[2]) return send(res, 200, quoteView(q));
+      const current = quoteStatus(q);
+      if (x[2] === "send") {
+        if (current !== "draft") return problem(res, 409, `Quote is now ${current}`);
+        Object.assign(q, { status: "sent", sentAt: now() });
+      } else {
+        if (current !== "draft" && current !== "sent") return problem(res, 409, `Quote is now ${current}`);
+        Object.assign(q, { status: "cancelled", cancelledAt: now() });
+      }
+      return send(res, 200, quoteView(q));
     }
     if (path === "/production-run") {
       const date = url.searchParams.get("date");

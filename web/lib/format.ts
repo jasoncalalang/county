@@ -1,5 +1,6 @@
 // Dates and money for display: Intl in en-PH and the tenant's timezone, from values the API
 // returns. Nothing here derives a business date (interface design, section 11).
+import type { QuoteStatus } from "./api-types";
 
 /** v1 fixes every business to Asia/Manila (functional spec 3.1). */
 export const TIME_ZONE = "Asia/Manila";
@@ -101,3 +102,17 @@ export const STATUS_LABEL: Record<Status, string> = {
   delivered: "Delivered",
   cancelled: "Cancelled",
 };
+
+export const QUOTE_STATUS_LABEL: Record<QuoteStatus, string> = {
+  draft: "Draft",
+  sent: "Sent",
+  accepted: "Accepted",
+  declined: "Declined",
+  expired: "Expired",
+  cancelled: "Cancelled",
+};
+
+/** Quote numbers are their own sequence; the Q keeps `#Q7` apart from order `#7`. */
+export function quoteNumber(number: number): string {
+  return `#Q${number}`;
+}

@@ -3,9 +3,11 @@
 import { resellerApi, type Fetch } from "./api";
 import {
   confirmCancelPage,
+  confirmDeclinePage,
   confirmationPage,
   inactivePage,
   priceListPage,
+  quotePage,
   unavailablePage,
   type FormState,
 } from "./render";
@@ -43,14 +45,16 @@ const base = (token: string) => `/order/${encodeURIComponent(token)}`;
 
 export async function showPriceList(token: string, fetchImpl?: Fetch, state?: FormState): Promise<Response> {
   const api = resellerApi(fetchImpl);
-  const catalog = await api.catalog(token);
+  const [catalog, quotes] = await Promise.all([api.catalog(token), api.quotes(token)]);
   if (!catalog.ok) return catalog.status === 404 ? inactive() : htmlResponse(unavailablePage(token), 503);
+  // The price list still works when the quotes cannot be read; they are left out.
+  const offers = quotes.ok ? quotes.body : [];
   if (state) {
     // Only rows still on the price list can carry a link to themselves.
     const listed = new Set(catalog.body.products.map((p) => p.id));
     state = { ...state, errors: state.errors.map((e) => (e.productId && !listed.has(e.productId) ? { message: e.message } : e)) };
   }
-  const page = priceListPage(token, catalog.body, crypto.randomUUID(), state);
+  const page = priceListPage(token, catalog.body, crypto.randomUUID(), state, offers);
   return state?.errors.length ? htmlResponse(page, 422) : htmlResponse(page, 200, PRICE_LIST_CACHE);
 }
 
@@ -143,5 +147,60 @@ export async function cancelOrder(token: string, rawId: string, form: FormData, 
       );
   }
   if (cancelled.status === 404) return inactive();
+  return htmlResponse(unavailablePage(token), 503);
+}
+
+const quoteBase = (token: string, id: number) => `${base(token)}/quotes/${id}`;
+
+/** The quote page with a fresh key, or the page a failed read calls for. */
+async function renderQuote(token: string, id: number, fetchImpl?: Fetch, notice?: string, status = 200): Promise<Response> {
+  const api = resellerApi(fetchImpl);
+  const [catalog, quote] = await Promise.all([api.catalog(token), api.quote(token, id)]);
+  if (!catalog.ok) return catalog.status === 404 ? inactive() : htmlResponse(unavailablePage(token), 503);
+  if (!quote.ok) return quote.status === 404 ? inactive() : htmlResponse(unavailablePage(token), 503);
+  const page = quotePage(token, catalog.body, quote.body, crypto.randomUUID(), notice);
+  // Like the price list, an untouched quote page may come back from the back/forward cache, so
+  // that Back and accept again reuses its key and returns the same order.
+  return htmlResponse(page, status, notice ? "no-store" : PRICE_LIST_CACHE);
+}
+
+export async function showQuote(token: string, rawId: string, fetchImpl?: Fetch): Promise<Response> {
+  const id = orderId(rawId);
+  if (id === null) return inactive();
+  return renderQuote(token, id, fetchImpl);
+}
+
+export async function acceptQuote(token: string, rawId: string, form: FormData, fetchImpl?: Fetch): Promise<Response> {
+  const id = orderId(rawId);
+  if (id === null) return inactive();
+  const key = String(form.get("idempotencyKey") ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(key)) return renderQuote(token, id, fetchImpl, "Please accept the quote again.", 422);
+
+  const accepted = await resellerApi(fetchImpl).accept(token, id, key);
+  if (accepted.ok) return redirect(`${base(token)}/orders/${accepted.body.id}`);
+  if (accepted.status === 404) return inactive();
+  if (accepted.status === 409 || accepted.status === 422) {
+    // Expired, declined or withdrawn since the page was shown, or a spent key: show it as it is now.
+    return renderQuote(token, id, fetchImpl, "This quote can no longer be accepted.", 409);
+  }
+  return htmlResponse(unavailablePage(token), 503);
+}
+
+export async function declineQuote(token: string, rawId: string, form: FormData, fetchImpl?: Fetch): Promise<Response> {
+  const id = orderId(rawId);
+  if (id === null) return inactive();
+  const api = resellerApi(fetchImpl);
+  const current = await api.quote(token, id);
+  if (!current.ok) return current.status === 404 ? inactive() : htmlResponse(unavailablePage(token), 503);
+  if (form.get("confirmed") !== "yes") return htmlResponse(confirmDeclinePage(token, current.body));
+
+  const declined = await api.decline(token, id);
+  if (declined.ok) return redirect(quoteBase(token, id));
+  if (declined.status === 404) return inactive();
+  if (declined.status === 409) {
+    const now = await api.quote(token, id);
+    if (now.ok && now.body.status === "declined") return redirect(quoteBase(token, id));
+    return renderQuote(token, id, fetchImpl, "This quote can no longer be declined.", 409);
+  }
   return htmlResponse(unavailablePage(token), 503);
 }

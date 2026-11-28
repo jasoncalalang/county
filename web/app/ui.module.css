@@ -705,3 +705,74 @@ button:disabled {
 .cards .items {
   max-width: none;
 }
+
+/* Quote statuses. A sent quote waits on the reseller, as a confirmed order waits on delivery. */
+.sent {
+  color: var(--confirmed-ink);
+  background: var(--confirmed-ground);
+}
+.accepted {
+  color: var(--delivered-ink);
+  background: var(--delivered-ground);
+}
+.draft,
+.expired {
+  color: var(--cancelled-ink);
+  background: var(--cancelled-ground);
+}
+.declined {
+  color: var(--danger);
+  background: var(--danger-ground);
+}
+
+/* New quote: one row per product with a quantity box */
+.lineRows {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  padding: 0 16px;
+  margin: 0 0 16px;
+}
+.lineRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.lineRow:last-child {
+  border-bottom: 0;
+}
+.lineRow > span {
+  flex: 1;
+}
+.lineRow input {
+  width: 80px;
+  height: var(--tap);
+  font: inherit;
+  text-align: right;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--ink);
+}
+.lineRow input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.field textarea {
+  min-height: 88px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 8px 12px;
+}
+.field select[aria-invalid="true"],
+.field textarea[aria-invalid="true"] {
+  border-color: var(--danger);
+}

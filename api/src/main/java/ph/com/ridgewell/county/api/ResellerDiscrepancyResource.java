@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
+import org.eclipse.microprofile.openapi.annotations.parameters.RequestBody;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import ph.com.ridgewell.county.persistence.Discrepancies;
@@ -41,14 +42,14 @@ public class ResellerDiscrepancyResource {
   @POST
   @Path("approve")
   public Views.Discrepancy approve(
-      @PathParam("token") String token, @PathParam("id") long id, Inputs.Resolve input) {
-    throw new UnsupportedOperationException();
+      @PathParam("token") String token, @PathParam("id") long id, @RequestBody(required = false) @Valid Inputs.Resolve input) {
+    return discrepancies.approveByReseller(token, id, input);
   }
 
   @POST
   @Path("decline")
   public Views.Discrepancy decline(
-      @PathParam("token") String token, @PathParam("id") long id, Inputs.Resolve input) {
-    throw new UnsupportedOperationException();
+      @PathParam("token") String token, @PathParam("id") long id, @RequestBody(required = false) @Valid Inputs.Resolve input) {
+    return discrepancies.declineByReseller(token, id, input);
   }
 }

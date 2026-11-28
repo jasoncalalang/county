@@ -6,7 +6,9 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Response;
+import java.util.List;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
+import org.eclipse.microprofile.openapi.annotations.parameters.RequestBody;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
@@ -19,6 +21,7 @@ import ph.com.ridgewell.county.persistence.Discrepancies;
 @Tag(name = "Owner Resource")
 public class OwnerDiscrepancyResource {
   @Inject io.quarkus.security.identity.SecurityIdentity identity;
+  @jakarta.ws.rs.core.Context jakarta.ws.rs.core.UriInfo uri;
   @Inject Discrepancies discrepancies;
 
   private String subject() {
@@ -49,19 +52,21 @@ public class OwnerDiscrepancyResource {
 
   @POST
   @Path("orders/{id}/discrepancy/approve")
-  public Views.Discrepancy approve(@PathParam("id") long id, Inputs.Resolve input) {
-    throw new UnsupportedOperationException();
+  public Views.Discrepancy approve(@PathParam("id") long id, @RequestBody(required = false) @Valid Inputs.Resolve input) {
+    return discrepancies.approveByOwner(subject(), id, input);
   }
 
   @POST
   @Path("orders/{id}/discrepancy/decline")
-  public Views.Discrepancy decline(@PathParam("id") long id, Inputs.Resolve input) {
-    throw new UnsupportedOperationException();
+  public Views.Discrepancy decline(@PathParam("id") long id, @RequestBody(required = false) @Valid Inputs.Resolve input) {
+    return discrepancies.declineByOwner(subject(), id, input);
   }
 
   @GET
   @Path("discrepancies")
-  public java.util.List<Views.DiscrepancySummary> list(@QueryParam("status") String status) {
-    throw new UnsupportedOperationException();
+  public List<Views.DiscrepancySummary> list(@QueryParam("status") String status) {
+    if (status == null && uri.getQueryParameters().containsKey("status"))
+      throw Problem.field("status", "Use open, approved or declined");
+    return discrepancies.list(subject(), status);
   }
 }

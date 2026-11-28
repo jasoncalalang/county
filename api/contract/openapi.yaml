@@ -145,6 +145,40 @@ components:
           type: number
         shortfallTotal:
           type: number
+    DiscrepancySummaryView:
+      description: One report as the owner's list shows it
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        orderId:
+          type: integer
+          format: int64
+        orderNumber:
+          type: integer
+          format: int64
+        resellerId:
+          type: integer
+          format: int64
+        resellerName:
+          type: string
+        filedBy:
+          type: string
+          enum:
+          - owner
+          - reseller
+        status:
+          type: string
+          enum:
+          - open
+          - approved
+          - declined
+        shortfallTotal:
+          type: number
+        filedAt:
+          type: string
+          format: date-time
     DiscrepancyView:
       type: object
       properties:
@@ -713,6 +747,12 @@ components:
           - integer
           - "null"
           format: int64
+    Resolve:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 500
     SettingsPreviewView:
       type: object
       properties:
@@ -791,6 +831,31 @@ components:
 tags:
 - name: Owner Resource
 paths:
+  /api/discrepancies:
+    get:
+      tags:
+      - Owner Resource
+      parameters:
+      - name: status
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DiscrepancySummaryView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: List
+      security:
+      - SecurityScheme: []
   /api/me:
     get:
       responses:
@@ -966,6 +1031,70 @@ paths:
         "400":
           description: Bad Request
       summary: File
+      tags:
+      - Reseller Discrepancy Resource
+  /api/order/{token}/orders/{id}/discrepancy/approve:
+    post:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Resolve"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscrepancyView"
+        "400":
+          description: Bad Request
+      summary: Approve
+      tags:
+      - Reseller Discrepancy Resource
+  /api/order/{token}/orders/{id}/discrepancy/decline:
+    post:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Resolve"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscrepancyView"
+        "400":
+          description: Bad Request
+      summary: Decline
       tags:
       - Reseller Discrepancy Resource
   /api/order/{token}/quotes:
@@ -1272,6 +1401,72 @@ paths:
         "400":
           description: Bad Request
       summary: File
+      security:
+      - SecurityScheme: []
+  /api/orders/{id}/discrepancy/approve:
+    post:
+      tags:
+      - Owner Resource
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Resolve"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscrepancyView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Approve
+      security:
+      - SecurityScheme: []
+  /api/orders/{id}/discrepancy/decline:
+    post:
+      tags:
+      - Owner Resource
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Resolve"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscrepancyView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Decline
       security:
       - SecurityScheme: []
   /api/orders/{id}/mark-paid:

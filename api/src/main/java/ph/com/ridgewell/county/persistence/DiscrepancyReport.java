@@ -4,8 +4,11 @@ import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import ph.com.ridgewell.county.domain.DiscrepancyRules;
+import ph.com.ridgewell.county.domain.OrderRules;
 
 /**
  * A short-delivery report on a delivered order. Its lines are captured at filing; resolving it is
@@ -48,6 +51,14 @@ public class DiscrepancyReport extends PanacheEntityBase {
 
   @Column(name = "idempotency_key")
   public UUID idempotencyKey;
+
+  public DiscrepancyRules.Status currentStatus() {
+    return DiscrepancyRules.Status.valueOf(status.toUpperCase(Locale.ROOT));
+  }
+
+  public OrderRules.Actor filer() {
+    return OrderRules.Actor.valueOf(filedBy.toUpperCase(Locale.ROOT));
+  }
 
   public static Optional<DiscrepancyReport> forOrder(long tenant, long order) {
     return find("tenantId = ?1 and orderId = ?2", tenant, order).singleResultOptional();

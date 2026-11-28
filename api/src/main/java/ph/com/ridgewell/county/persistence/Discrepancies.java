@@ -4,6 +4,8 @@ import static jakarta.persistence.LockModeType.NONE;
 import static jakarta.persistence.LockModeType.PESSIMISTIC_WRITE;
 import static ph.com.ridgewell.county.domain.OrderRules.Actor.OWNER;
 import static ph.com.ridgewell.county.domain.OrderRules.Actor.RESELLER;
+import static ph.com.ridgewell.county.domain.DiscrepancyRules.Status.APPROVED;
+import static ph.com.ridgewell.county.domain.DiscrepancyRules.Status.DECLINED;
 import static ph.com.ridgewell.county.domain.OrderRules.Status.DELIVERED;
 
 import io.quarkus.panache.common.Sort;
@@ -16,12 +18,14 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import ph.com.ridgewell.county.api.Inputs;
 import ph.com.ridgewell.county.api.Problem;
 import ph.com.ridgewell.county.api.Views;
 import ph.com.ridgewell.county.domain.DiscrepancyRules;
+import ph.com.ridgewell.county.domain.DiscrepancyRules.Status;
 import ph.com.ridgewell.county.domain.OrderRules.Actor;
 import ph.com.ridgewell.county.domain.Quantity;
 import ph.com.ridgewell.county.domain.Unit;
@@ -66,6 +70,99 @@ public class Discrepancies {
     var reseller = Orders.reseller(token, NONE);
     var order = Orders.order(reseller.tenantId, orderId, reseller.id, NONE);
     return existing(order);
+  }
+
+  @Transactional
+  public Views.Discrepancy approveByOwner(String subject, long orderId, Inputs.Resolve input) {
+    var owner = Owners.tenant(subject);
+    var order = Orders.order(owner.id, orderId, null, PESSIMISTIC_WRITE);
+    return resolve(order, input, OWNER, APPROVED);
+  }
+
+  @Transactional
+  public Views.Discrepancy declineByOwner(String subject, long orderId, Inputs.Resolve input) {
+    var owner = Owners.tenant(subject);
+    var order = Orders.order(owner.id, orderId, null, PESSIMISTIC_WRITE);
+    return resolve(order, input, OWNER, DECLINED);
+  }
+
+  @Transactional
+  public Views.Discrepancy approveByReseller(String token, long orderId, Inputs.Resolve input) {
+    var reseller = Orders.reseller(token, PESSIMISTIC_WRITE);
+    var order = Orders.order(reseller.tenantId, orderId, reseller.id, PESSIMISTIC_WRITE);
+    return resolve(order, input, RESELLER, APPROVED);
+  }
+
+  @Transactional
+  public Views.Discrepancy declineByReseller(String token, long orderId, Inputs.Resolve input) {
+    var reseller = Orders.reseller(token, PESSIMISTIC_WRITE);
+    var order = Orders.order(reseller.tenantId, orderId, reseller.id, PESSIMISTIC_WRITE);
+    return resolve(order, input, RESELLER, DECLINED);
+  }
+
+  /** The owner's reports, newest first, optionally only those in one status. */
+  @Transactional
+  public List<Views.DiscrepancySummary> list(String subject, String status) {
+    long tenant = Owners.tenant(subject).id;
+    StringBuilder query =
+        new StringBuilder(
+            "select r, o from DiscrepancyReport r join SalesOrder o"
+                + " on o.tenantId = r.tenantId and o.id = r.orderId where r.tenantId = ?1");
+    Status wanted = status == null ? null : statusValue(status);
+    if (wanted != null) query.append(" and r.status = ?2");
+    query.append(" order by r.filedAt desc, r.id desc");
+    var found =
+        DiscrepancyReport.getEntityManager().createQuery(query.toString(), Object[].class);
+    found.setParameter(1, tenant);
+    if (wanted != null) found.setParameter(2, wanted.wire());
+    var rows = found.getResultList();
+    Map<Long, String> names =
+        Orders.resellerNames(
+            tenant, rows.stream().map(row -> ((SalesOrder) row[1]).resellerId).toList());
+    return rows.stream()
+        .map(
+            row -> {
+              var r = (DiscrepancyReport) row[0];
+              var o = (SalesOrder) row[1];
+              return new Views.DiscrepancySummary(
+                  r.id,
+                  r.orderId,
+                  o.number,
+                  o.resellerId,
+                  names.get(o.resellerId),
+                  r.filedBy,
+                  r.status,
+                  r.shortfallTotal,
+                  Times.instant(r.filedAt));
+            })
+        .toList();
+  }
+
+  private static Status statusValue(String value) {
+    try {
+      return Status.valueOf(value.toUpperCase(Locale.ROOT));
+    } catch (IllegalArgumentException e) {
+      throw Problem.field("status", "Use open, approved or declined");
+    }
+  }
+
+  /** Resolves the report of a locked order, if the rule lets this party do it. */
+  private Views.Discrepancy resolve(
+      SalesOrder order, Inputs.Resolve input, Actor resolver, Status target) {
+    var report =
+        DiscrepancyReport.forOrder(order.tenantId, order.id)
+            .orElseThrow(() -> new Problem(404, "Not found"));
+    try {
+      DiscrepancyRules.resolve(report.currentStatus(), report.filer(), resolver, target);
+    } catch (IllegalArgumentException e) {
+      throw new Problem(409, e.getMessage());
+    }
+    report.status = target.wire();
+    report.resolvedBy = Stored.of(resolver);
+    report.resolvedAt = Times.now(clock);
+    report.resolutionNote = input == null || input.note() == null ? "" : input.note();
+    DiscrepancyReport.flush();
+    return view(report, order.number, lines(report));
   }
 
   private Views.Discrepancy existing(SalesOrder order) {

@@ -83,5 +83,5 @@ public final class Inputs {
       @Size(max = 500) String note,
       @NotNull UUID idempotencyKey) {}
 
-  public record Resolve(String note) {}
+  public record Resolve(@Size(max = 500) String note) {}
 }

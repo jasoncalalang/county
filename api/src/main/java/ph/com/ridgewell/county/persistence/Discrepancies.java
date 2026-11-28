@@ -45,17 +45,26 @@ public class Discrepancies {
 
   public record Filing(boolean replay, Views.Discrepancy report) {}
 
+  /** The owner's order, write-locked. */
+  private static SalesOrder ownersOrder(String subject, long orderId) {
+    return Orders.order(Owners.tenant(subject).id, orderId, null, PESSIMISTIC_WRITE);
+  }
+
+  /** The link's reseller, write-locked, then the reseller's order, write-locked (ADR 0013). */
+  private static SalesOrder resellersOrder(String token, long orderId) {
+    var reseller = Orders.reseller(token, PESSIMISTIC_WRITE);
+    return Orders.order(reseller.tenantId, orderId, reseller.id, PESSIMISTIC_WRITE);
+  }
+
   @Transactional
   public Filing fileByOwner(String subject, long orderId, Inputs.Discrepancy input) {
-    var owner = Owners.tenant(subject);
-    var order = Orders.order(owner.id, orderId, null, PESSIMISTIC_WRITE);
+    var order = ownersOrder(subject, orderId);
     return file(order, input, OWNER);
   }
 
   @Transactional
   public Filing fileByReseller(String token, long orderId, Inputs.Discrepancy input) {
-    var reseller = Orders.reseller(token, PESSIMISTIC_WRITE);
-    var order = Orders.order(reseller.tenantId, orderId, reseller.id, PESSIMISTIC_WRITE);
+    var order = resellersOrder(token, orderId);
     return file(order, input, RESELLER);
   }
 
@@ -74,29 +83,25 @@ public class Discrepancies {
 
   @Transactional
   public Views.Discrepancy approveByOwner(String subject, long orderId, Inputs.Resolve input) {
-    var owner = Owners.tenant(subject);
-    var order = Orders.order(owner.id, orderId, null, PESSIMISTIC_WRITE);
+    var order = ownersOrder(subject, orderId);
     return resolve(order, input, OWNER, APPROVED);
   }
 
   @Transactional
   public Views.Discrepancy declineByOwner(String subject, long orderId, Inputs.Resolve input) {
-    var owner = Owners.tenant(subject);
-    var order = Orders.order(owner.id, orderId, null, PESSIMISTIC_WRITE);
+    var order = ownersOrder(subject, orderId);
     return resolve(order, input, OWNER, DECLINED);
   }
 
   @Transactional
   public Views.Discrepancy approveByReseller(String token, long orderId, Inputs.Resolve input) {
-    var reseller = Orders.reseller(token, PESSIMISTIC_WRITE);
-    var order = Orders.order(reseller.tenantId, orderId, reseller.id, PESSIMISTIC_WRITE);
+    var order = resellersOrder(token, orderId);
     return resolve(order, input, RESELLER, APPROVED);
   }
 
   @Transactional
   public Views.Discrepancy declineByReseller(String token, long orderId, Inputs.Resolve input) {
-    var reseller = Orders.reseller(token, PESSIMISTIC_WRITE);
-    var order = Orders.order(reseller.tenantId, orderId, reseller.id, PESSIMISTIC_WRITE);
+    var order = resellersOrder(token, orderId);
     return resolve(order, input, RESELLER, DECLINED);
   }
 

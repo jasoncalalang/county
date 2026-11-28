@@ -263,7 +263,7 @@ class QuoteApiTest {
     org.junit.jupiter.api.Assertions.assertEquals(
         java.util.List.of("confirmed"), replay.jsonPath().getList("events.toStatus"));
     org.junit.jupiter.api.Assertions.assertEquals(
-        java.util.List.of("Fixture business"), replay.jsonPath().getList("events.actorName"));
+        java.util.List.of("Nena"), replay.jsonPath().getList("events.actorName"));
   }
 
   @Test

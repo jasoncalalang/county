@@ -84,6 +84,13 @@ describe("price list", () => {
     expect(page).not.toContain("autocomplete=\"off\"");
   });
 
+  test("a kg product takes decimals and a pack takes whole numbers", async () => {
+    const page = await (await showPriceList(TOKEN, fakeFetch)).text();
+
+    expect(page).toMatch(/inputmode="numeric"[^>]*step="1"[^>]*id="q1"/);
+    expect(page).toMatch(/inputmode="decimal"[^>]*step="0.001"[^>]*id="q3"/);
+  });
+
   test("stays within the page budget: under 50 KB with a 2 KB script and 8 KB of CSS", async () => {
     const many = { ...catalog, products: Array.from({ length: 50 }, (_, i) => ({ id: i + 1, name: `Product ${i + 1} with a longer name`, unit: "pack" as const, price: 123.45 })) };
     routes[`GET /order/${TOKEN}`] = () => ({ status: 200, body: { ...many, recentOrders: Array.from({ length: 10 }, (_, i) => ({ id: i + 1, number: i + 1, deliveryDate: "2026-11-27", total: 2160, status: "placed", placedAt: "2026-11-26T02:00:00Z" })) } });
@@ -137,6 +144,39 @@ describe("placing an order", () => {
       note: "before 7am",
       idempotencyKey: KEY,
     });
+  });
+
+  test("sends a fractional quantity for a kg product", async () => {
+    routes[`POST /order/${TOKEN}/orders`] = () => ({ status: 201, body: order });
+    const response = await placeOrder(TOKEN, form({ idempotencyKey: KEY, q1: "10", q3: "1.5" }), fakeFetch);
+
+    expect(response.status).toBe(303);
+    expect(calls.at(-1)?.body).toEqual({
+      lines: [
+        { productId: 1, quantity: 10 },
+        { productId: 3, quantity: 1.5 },
+      ],
+      idempotencyKey: KEY,
+    });
+  });
+
+  test("a kg quantity with four decimals marks its row and is not sent", async () => {
+    const response = await placeOrder(TOKEN, form({ idempotencyKey: KEY, q1: "1", q3: "1.2345" }), fakeFetch);
+    const page = await response.text();
+
+    expect(response.status).toBe(422);
+    expect(page).toContain('<a href="#q3">Enter a number from 0 to 9999, with up to 3 decimals.</a>');
+    expect(page).toContain('class="row bad" for="q3"');
+    expect(page).toContain('value="1.2345"');
+    expect(calls.some((c) => c.key.startsWith("POST"))).toBe(false);
+  });
+
+  /** Guard: passes before the change too, because the typed value was already escaped. */
+  test("markup typed as a quantity comes back escaped", async () => {
+    const page = await (await placeOrder(TOKEN, form({ idempotencyKey: KEY, q3: '"><script>alert(1)</script>' }), fakeFetch)).text();
+
+    expect(page).not.toContain("<script>alert(1)");
+    expect(page).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
   });
 
   test("a replayed submission (200) lands on the same confirmation", async () => {

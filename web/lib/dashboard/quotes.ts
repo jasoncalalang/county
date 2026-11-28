@@ -1,5 +1,5 @@
 // Pure helpers for the dashboard's quote screens, kept apart so they can be tested.
-import type { QuoteStatus, QuoteSummaryView, QuoteView, ResellerView } from "../api-types";
+import type { QuoteStatus, QuoteSummaryView, QuoteView, ResellerView, Unit } from "../api-types";
 import { manilaDate, quoteNumber } from "../format";
 
 export const QUOTE_FILTERS: (QuoteStatus | "all")[] = ["all", "draft", "sent", "accepted", "declined", "expired", "cancelled"];
@@ -53,7 +53,9 @@ export type DraftErrors = Partial<Record<"resellerId" | "lines" | "expiresOn" | 
 export function quoteInput(
   draft: QuoteDraft,
   today: string,
+  units: Record<string, Unit> = {},
 ): { ok: true; input: { resellerId: number; lines: { productId: number; quantity: number }[]; note?: string; expiresOn: string } } | { ok: false; errors: DraftErrors } {
+  void units;
   const errors: DraftErrors = {};
   const quantities: Record<string, string> = {};
   const lines: { productId: number; quantity: number }[] = [];

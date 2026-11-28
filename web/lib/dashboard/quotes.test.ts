@@ -28,6 +28,34 @@ describe("quoteInput", () => {
     expect(checked).toEqual({ ok: false, errors: { quantities: { "1": "Enter a whole number from 0 to 9999" } } });
   });
 
+  test("a kg product takes a decimal quantity", () => {
+    const checked = quoteInput({ ...draft, quantities: { "1": "10", "3": "1.5" } }, "2026-11-28", { "1": "pack", "3": "kg" });
+    expect(checked).toEqual({
+      ok: true,
+      input: {
+        resellerId: 7,
+        lines: [
+          { productId: 1, quantity: 10 },
+          { productId: 3, quantity: 1.5 },
+        ],
+        expiresOn: "2026-12-05",
+      },
+    });
+  });
+
+  test("a fraction of a pack, or four decimals of kg, is marked on its row", () => {
+    const checked = quoteInput({ ...draft, quantities: { "1": "1.5", "3": "1.2345" } }, "2026-11-28", { "1": "pack", "3": "kg" });
+    expect(checked).toEqual({
+      ok: false,
+      errors: {
+        quantities: {
+          "1": "Enter a whole number from 0 to 9999",
+          "3": "Enter a number from 0 to 9999, with up to 3 decimals",
+        },
+      },
+    });
+  });
+
   test("today is a valid last day", () => {
     expect(quoteInput({ ...draft, expiresOn: "2026-11-28" }, "2026-11-28").ok).toBe(true);
   });

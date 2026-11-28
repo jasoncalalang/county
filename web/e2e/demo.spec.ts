@@ -305,3 +305,43 @@ test("quotes: the wholesaler sees the acceptance and its order; a declined quote
   await expect(page.getByRole("row", { name: /#Q1/ })).toHaveCount(0);
   await shot(page, "14-quotes");
 });
+
+test("fractional quantities: kg takes 1.5, a pack does not, and the total rounds half up", async ({ browser, request }) => {
+  // 99.99 x 0.333 = 33.29667, which is 33.30 half up.
+  const added = await request.post(`${API}/products`, {
+    headers: { authorization: "Bearer e2e" },
+    data: { name: "Ube Halaya", unit: "kg", price: 99.99 },
+  });
+  expect(added.status()).toBe(201);
+
+  const live = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const withScript = await live.newPage();
+  await withScript.goto(link);
+  await withScript.getByLabel("Quantity of Ube Halaya").fill("0.333");
+  await expect(withScript.getByText("Total ₱33.30")).toBeVisible();
+  await withScript.getByLabel("Quantity of Tocino").fill("1.5");
+  await expect(withScript.getByText("Total ₱513.30")).toBeVisible();
+  await live.close();
+
+  const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  await page.goto(link);
+  // The browser stops a half pack before it is sent, so the server's answer is read by posting
+  // the rendered form directly, as a client that skips the browser's check would.
+  const pack = (await page.getByLabel("Quantity of Longganisa Hamonado").getAttribute("name"))!;
+  const key = await page.locator('input[name="idempotencyKey"]').inputValue();
+  const refused = await page.request.post(link, { form: { idempotencyKey: key, [pack]: "1.5" } });
+  expect(refused.status()).toBe(422);
+  expect(await refused.text()).toContain("Enter a whole number from 0 to 9999.");
+
+  await page.getByLabel("Quantity of Tocino").fill("1.5");
+  await page.getByLabel("Quantity of Ube Halaya").fill("0.333");
+  await page.getByRole("button", { name: "Place order" }).click();
+  await expect(page.getByRole("heading", { name: /^Order #\d+ placed$/ })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "1.5 kg × ₱320.00" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "₱480.00" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "0.333 kg × ₱99.99" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "₱33.30" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "₱513.30" })).toBeVisible();
+  await context.close();
+});

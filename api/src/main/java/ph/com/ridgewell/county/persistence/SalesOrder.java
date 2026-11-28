@@ -6,7 +6,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.Locale;
 import java.util.UUID;
+import ph.com.ridgewell.county.domain.OrderRules;
 
 /**
  * A reseller's order to the business: a sales order (ADR 0016). Lines, note, delivery date and
@@ -52,6 +54,14 @@ public class SalesOrder extends PanacheEntityBase {
 
   @Column(name = "paid_at")
   public Instant paidAt;
+
+  public OrderRules.Status currentStatus() {
+    return OrderRules.Status.valueOf(status.toUpperCase(Locale.ROOT));
+  }
+
+  public void moveTo(OrderRules.Status target) {
+    status = Stored.of(target);
+  }
 
   /** Scoped to the tenant, and to the reseller when one is given. */
   public static Optional<SalesOrder> inTenant(

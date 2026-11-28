@@ -6,6 +6,7 @@ import static jakarta.persistence.LockModeType.PESSIMISTIC_WRITE;
 
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import java.math.BigDecimal;
@@ -23,6 +24,8 @@ import ph.com.ridgewell.county.domain.*;
 public class Orders {
   static final ZoneId ZONE = ZoneId.of("Asia/Manila");
   private static final BigDecimal MAXIMUM = new BigDecimal("9999999999.99");
+
+  @Inject OrderHistory history;
 
   public record Placement(boolean replay, Views.Order order) {}
 
@@ -102,7 +105,7 @@ public class Orders {
   @Transactional
   public Views.Order getPublic(String token, long id) {
     var reseller = reseller(token, NONE);
-    return view(order(reseller.tenantId, id, reseller.id, NONE));
+    return resellerView(order(reseller.tenantId, id, reseller.id, NONE));
   }
 
   /** A submitted line priced for a reseller: the product as read under its lock. */
@@ -162,7 +165,7 @@ public class Orders {
       // A key used by another reseller of this business must not reveal that order.
       if (existing.get().resellerId != reseller.id)
         throw new Problem(409, "Idempotency key already used");
-      return new Placement(true, view(existing.get()));
+      return new Placement(true, resellerView(existing.get()));
     }
     var priced = price(reseller, input.lines());
     List<OrderLine> lines = new ArrayList<>();
@@ -199,7 +202,7 @@ public class Orders {
 
   @Transactional
   public Views.Order get(String subject, long id) {
-    return view(order(Owners.tenant(subject).id, id, null, NONE));
+    return ownerView(order(Owners.tenant(subject).id, id, null, NONE));
   }
 
   @Transactional
@@ -263,49 +266,6 @@ public class Orders {
   }
 
   @Transactional
-  public Views.Order transition(
-      String subject, String token, long orderId, String target, boolean paid) {
-    long tenant;
-    Long resellerId = null;
-    if (token != null) {
-      var reseller = reseller(token, PESSIMISTIC_WRITE);
-      tenant = reseller.tenantId;
-      resellerId = reseller.id;
-    } else tenant = Owners.tenant(subject).id;
-    var order = order(tenant, orderId, resellerId, PESSIMISTIC_WRITE);
-    String current = order.status;
-    Instant now = Times.now();
-    if (target.equals("paid")) {
-      if (!current.equals("delivered") || order.paid)
-        throw new Problem(409, "Order is now " + current);
-      order.paid = true;
-      order.paidAt = now;
-    } else {
-      try {
-        OrderRules.transition(
-            statusValue(current),
-            statusValue(target),
-            token == null ? OrderRules.Actor.OWNER : OrderRules.Actor.RESELLER);
-      } catch (IllegalArgumentException e) {
-        throw new Problem(409, "Order is now " + current);
-      }
-      order.status = target;
-      switch (target) {
-        case "confirmed" -> order.confirmedAt = now;
-        case "cancelled" -> order.cancelledAt = now;
-        case "delivered" -> {
-          order.deliveredAt = now;
-          order.paid = paid;
-          order.paidAt = paid ? now : null;
-        }
-        default -> throw new Problem(409, "Invalid transition");
-      }
-    }
-    SalesOrder.flush();
-    return view(order);
-  }
-
-  @Transactional
   public Views.ProductionRun production(String subject, String date) {
     LocalDate delivery = date(date);
     long tenant = Owners.tenant(subject).id;
@@ -338,18 +298,31 @@ public class Orders {
     return new Views.ProductionRun(date, lines, unconfirmed);
   }
 
-  private static SalesOrder order(long tenant, long id, Long reseller, LockModeType lock) {
+  static SalesOrder order(long tenant, long id, Long reseller, LockModeType lock) {
     return SalesOrder.inTenant(tenant, id, reseller, lock)
         .orElseThrow(() -> new Problem(404, "Not found"));
   }
 
-  static Views.Order view(SalesOrder o) {
-    return view(
-        o,
-        OrderLine.list("tenantId = ?1 and orderId = ?2", Sort.by("id"), o.tenantId, o.id));
+  private static List<OrderLine> lines(SalesOrder o) {
+    return OrderLine.list("tenantId = ?1 and orderId = ?2", Sort.by("id"), o.tenantId, o.id);
+  }
+
+  /** An order as the owner sees it, with its history. */
+  Views.Order ownerView(SalesOrder o) {
+    return view(o, lines(o), history.forOwner(o));
+  }
+
+  /** An order as its reseller sees it: the history names the business, never the owner. */
+  Views.Order resellerView(SalesOrder o) {
+    return view(o, lines(o), history.forReseller(o));
   }
 
   static Views.Order view(SalesOrder o, List<OrderLine> lines) {
+    return view(o, lines, List.of());
+  }
+
+  private static Views.Order view(
+      SalesOrder o, List<OrderLine> lines, List<Views.OrderEvent> events) {
     return new Views.Order(
         o.id,
         o.resellerId,
@@ -370,6 +343,7 @@ public class Orders {
                 l ->
                     new Views.OrderLine(
                         l.productId, l.productName, l.unit, l.quantity, l.price, l.total))
-            .toList());
+            .toList(),
+        events);
   }
 }

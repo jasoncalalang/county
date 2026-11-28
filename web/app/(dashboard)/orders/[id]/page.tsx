@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { OrderView, ResellerView } from "@/lib/api-types";
 import { ApiError, useApi } from "@/lib/dashboard/api";
+import { orderHistory } from "@/lib/dashboard/orders";
 import { formatDayTime, formatLongDate, formatMobile, formatMoney } from "@/lib/format";
 import { PaidBadge, StatusBadge } from "../../_components/badges";
 import { useOrderActions } from "../../_components/order-actions";
@@ -49,13 +50,7 @@ export default function OrderDetailPage() {
   }
   if (!order) return <Placeholder />;
 
-  const history = [
-    ["Placed", order.placedAt],
-    ["Confirmed", order.confirmedAt],
-    ["Delivered", order.deliveredAt],
-    ["Paid", order.paidAt],
-    ["Cancelled", order.cancelledAt],
-  ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+  const history = orderHistory(order);
 
   return (
     <>
@@ -134,10 +129,8 @@ export default function OrderDetailPage() {
               <dt>History</dt>
               <dd>
                 <ul className={ui.history}>
-                  {history.map(([label, at]) => (
-                    <li key={label}>
-                      {label} {formatDayTime(at)}
-                    </li>
+                  {history.map(({ label, at, by }) => (
+                    <li key={`${label} ${at}`}>{`${label} ${formatDayTime(at)}${by ? ` by ${by}` : ""}`}</li>
                   ))}
                 </ul>
               </dd>

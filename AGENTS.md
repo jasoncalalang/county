@@ -22,5 +22,6 @@ Tenant scope comes from the verified identity, never from request fields: a Goog
 token's subject resolves through `external_identity(provider, subject)` to an `app_user`,
 and a reseller token resolves to its tenant. Never link accounts by email. Every endpoint
 change needs isolation/validation tests and a committed OpenAPI diff
-(`./gradlew updateOpenApi`; `verifyOpenApi` runs in `build`). Write tests first. Do not
-merge or deploy without explicit authorization.
+(`./gradlew updateOpenApi`; `verifyOpenApi` runs in `build`). Write tests first, as red-green-refactor commits; the engineering rules and the
+plan-build-review loop are in [`CLAUDE.md`](CLAUDE.md). Do not merge or deploy without
+explicit authorization.

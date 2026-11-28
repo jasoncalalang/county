@@ -1,5 +1,6 @@
 package ph.com.ridgewell.county.persistence;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -14,6 +15,11 @@ final class Times {
   /** Now, at the microsecond precision of a PostgreSQL timestamp. */
   static Instant now() {
     return Instant.now().truncatedTo(ChronoUnit.MICROS);
+  }
+
+  /** The clock's now, at the microsecond precision of a PostgreSQL timestamp. */
+  static Instant now(Clock clock) {
+    return Instant.now(clock).truncatedTo(ChronoUnit.MICROS);
   }
 
   static String clock(LocalTime time) {

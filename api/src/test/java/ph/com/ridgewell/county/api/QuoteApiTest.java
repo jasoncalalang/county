@@ -185,6 +185,7 @@ class QuoteApiTest {
             .body("deliveryDate", is(catalogDate))
             .body("lines.productName", contains("Hamonado", "Longganisa"))
             .body("lines.price", contains(120.0f, 50.0f))
+            .body("events", empty())
             .extract()
             .jsonPath();
     long orderId = order.getLong("id");
@@ -240,6 +241,40 @@ class QuoteApiTest {
         .then()
         .statusCode(200)
         .body("$", hasSize(1));
+  }
+
+  @Test
+  @TestSecurity(user = "quote-replay-events", roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "quote-replay-events")})
+  void replayedAcceptanceShowsTheResellersViewOfTheOrderHistory() throws Exception {
+    var s = shop("09171230012");
+    sql(
+        "UPDATE app_user SET display_name='Nena Santos', email='nena.santos@example.com'"
+            + " WHERE id=(SELECT user_id FROM external_identity WHERE provider='google'"
+            + " AND subject=?)",
+        "quote-replay-events");
+    long id = sentQuote(s);
+    long order =
+        accept(s.token(), id, UUID.randomUUID())
+            .then()
+            .statusCode(201)
+            .extract()
+            .jsonPath()
+            .getLong("id");
+    given().basePath("").post("/api/orders/" + order + "/confirm").then().statusCode(200);
+
+    var replay = accept(s.token(), id, UUID.randomUUID());
+    replay.then().statusCode(200);
+    org.junit.jupiter.api.Assertions.assertEquals(
+        java.util.List.of("confirmed"), replay.jsonPath().getList("events.toStatus"));
+    org.junit.jupiter.api.Assertions.assertEquals(
+        java.util.List.of("Nena"), replay.jsonPath().getList("events.actorName"));
+    String body = replay.asString();
+    for (String forbidden :
+        new String[] {
+          "Nena Santos", "nena.santos@example.com", "actorUserId", "actorResellerId"
+        })
+      org.junit.jupiter.api.Assertions.assertFalse(body.contains(forbidden), body);
   }
 
   @Test

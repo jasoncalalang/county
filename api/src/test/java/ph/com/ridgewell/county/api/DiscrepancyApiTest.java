@@ -872,4 +872,17 @@ class DiscrepancyApiTest {
     for (String query : new String[] {"?status=pending", "?status=", "?status=open%20"})
       refused(listAsOwner(query), "status", "Use open, approved or declined");
   }
+
+  @Test
+  @TestSecurity(
+      user = "disc-list-case",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "disc-list-case")})
+  void statusesAreLowercaseOnTheWireSoTheFilterTakesNoOtherCase() throws SQLException {
+    shop("disc-list-case");
+    for (String query : new String[] {"?status=OPEN", "?status=Open", "?status=APPROVED"})
+      refused(listAsOwner(query), "status", "Use open, approved or declined");
+    for (String query : new String[] {"", "?status=open", "?status=approved", "?status=declined"})
+      listAsOwner(query).then().statusCode(200);
+  }
 }

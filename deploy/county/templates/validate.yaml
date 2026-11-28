@@ -1,0 +1,3 @@
+{{- /* Renders nothing; makes every render check the required values. */ -}}
+{{- $_ := include "county.tag" . -}}
+{{- $_ = include "county.publicUrl" . -}}

@@ -1,0 +1,3 @@
+# The image tag is set by the pipeline (--set image.tag=$GIT_COMMIT).
+# county.example.ph is a placeholder: use the hostname the Cloudflare tunnel serves.
+publicUrl: https://county.example.ph

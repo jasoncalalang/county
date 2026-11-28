@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: county-api
+spec:
+  selector:
+    matchLabels:
+      {{- include "county.selectorLabels" (dict "root" . "component" "api") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "county.selectorLabels" (dict "root" . "component" "api") | nindent 8 }}
+    spec:
+      containers:
+        - name: api
+          image: {{ include "county.image" (dict "root" . "name" "county-api") }}

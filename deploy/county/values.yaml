@@ -1,0 +1,3 @@
+# image.tag and publicUrl are deliberately unset: the render fails without them.
+image:
+  registry: ghcr.io/jasoncalalang

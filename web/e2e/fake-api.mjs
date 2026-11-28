@@ -32,6 +32,18 @@ function send(res, status, body) {
 const problem = (res, status, detail, errors = {}) => send(res, status, { type: "about:blank", status, detail, errors });
 const field = (res, path, message) => problem(res, 422, "Check the submitted fields", { [path]: message });
 const OWNER_NAME = "E2E";
+
+/** Price times quantity in centavos, rounded half up, from integers so floats cannot drift. */
+const lineTotal = (price, quantity) => Math.floor((Math.round(price * 100) * Math.round(quantity * 1000) + 500) / 1000) / 100;
+const sumTotals = (lines) => lines.reduce((cents, l) => cents + Math.round(l.total * 100), 0) / 100;
+/** Up to three decimals, above 0 and at most 9999, whole unless the product is sold by the kg. */
+function quantityProblem(product, quantity) {
+  if (typeof quantity !== "number" || !(quantity > 0) || quantity > 9999) return "Enter a quantity from 0.001 to 9999";
+  if (Math.abs(quantity * 1000 - Math.round(quantity * 1000)) > 1e-6) return "Use up to three decimals";
+  if (product.unit !== "kg" && !Number.isInteger(quantity)) return `${product.name} is sold by the ${product.unit}, so enter a whole number`;
+  if (lineTotal(product.price, quantity) < 0.01) return "A line must come to at least 0.01";
+  return null;
+}
 const resellerName = (o) => db.resellers.find((r) => r.id === o.resellerId)?.name;
 
 /**
@@ -172,7 +184,9 @@ createServer(async (req, res) => {
           const p = db.products.find((q) => q.id === line.productId);
           if (!p) return problem(res, 404, "Not found");
           if (!p.active) return field(res, `lines[${i}].productId`, `${p.name} is no longer available`);
-          lines.push({ productId: p.id, productName: p.name, unit: p.unit, quantity: line.quantity, price: p.price, total: p.price * line.quantity });
+          const bad = quantityProblem(p, line.quantity);
+          if (bad) return field(res, `lines[${i}].quantity`, bad);
+          lines.push({ productId: p.id, productName: p.name, unit: p.unit, quantity: line.quantity, price: p.price, total: lineTotal(p.price, line.quantity) });
         }
         const order = {
           id: db.nextId++,
@@ -181,7 +195,7 @@ createServer(async (req, res) => {
           placedAt: now(),
           deliveryDate: deliveryDate(),
           status: "placed",
-          total: lines.reduce((s, l) => s + l.total, 0),
+          total: sumTotals(lines),
           paid: false,
           note: input.note ?? "",
           confirmedAt: null,
@@ -294,10 +308,12 @@ createServer(async (req, res) => {
       if (r.status === "blocked") return field(res, "resellerId", "This reseller is blocked");
       if (!input.expiresOn || input.expiresOn < manilaToday()) return field(res, "expiresOn", "Choose today or a later day");
       const lines = [];
-      for (const line of input.lines) {
+      for (const [i, line] of input.lines.entries()) {
         const p = db.products.find((y) => y.id === line.productId);
         if (!p) return problem(res, 404, "Not found");
-        lines.push({ productId: p.id, productName: p.name, unit: p.unit, quantity: line.quantity, price: p.price, total: p.price * line.quantity });
+        const bad = quantityProblem(p, line.quantity);
+        if (bad) return field(res, `lines[${i}].quantity`, bad);
+        lines.push({ productId: p.id, productName: p.name, unit: p.unit, quantity: line.quantity, price: p.price, total: lineTotal(p.price, line.quantity) });
       }
       const q = {
         id: db.nextId++,
@@ -307,7 +323,7 @@ createServer(async (req, res) => {
         deliveryDate: deliveryDate(),
         expiresOn: input.expiresOn,
         status: "draft",
-        total: lines.reduce((sum, l) => sum + l.total, 0),
+        total: sumTotals(lines),
         note: input.note ?? "",
         acceptedOrderId: null,
         sentAt: null,
@@ -346,7 +362,7 @@ createServer(async (req, res) => {
       for (const o of confirmed)
         for (const l of o.lines) {
           const row = lines.get(l.productId) ?? { productId: l.productId, productName: l.productName, unit: l.unit, quantity: 0, orderCount: 0 };
-          row.quantity += l.quantity;
+          row.quantity = Math.round((row.quantity + l.quantity) * 1000) / 1000;
           row.orderCount += 1;
           lines.set(l.productId, row);
         }

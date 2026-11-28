@@ -5,7 +5,7 @@ var d=document;d.body.className+=" js";
 var f=d.getElementById("order"),t=d.getElementById("total");
 if(f&&t){
 var fmt=function(c){return "Total \\u20b1"+(c/100).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2})};
-var sum=function(){var s=0;f.querySelectorAll("input[data-price]").forEach(function(i){var q=parseInt(i.value,10);if(q>0&&q<=9999)s+=q*Math.round(parseFloat(i.getAttribute("data-price"))*100)});t.textContent=fmt(s)};
+var sum=function(){var s=0;f.querySelectorAll("input[data-price]").forEach(function(i){var q=i.step=="1"?parseInt(i.value,10):parseFloat(i.value);if(q>0&&q<=9999)s+=Math.floor((Math.round(parseFloat(i.getAttribute("data-price"))*100)*Math.round(q*1000)+500)/1000)});t.textContent=fmt(s)};
 t.hidden=false;sum();f.addEventListener("input",sum);
 var busy=false;f.addEventListener("submit",function(e){if(busy)e.preventDefault();busy=true});
 window.addEventListener("pageshow",function(){busy=false});

@@ -1,6 +1,7 @@
 // Pure helpers for the dashboard's quote screens, kept apart so they can be tested.
 import type { QuoteStatus, QuoteSummaryView, QuoteView, ResellerView, Unit } from "../api-types";
 import { manilaDate, quoteNumber } from "../format";
+import { parseQuantity } from "../quantity";
 
 export const QUOTE_FILTERS: (QuoteStatus | "all")[] = ["all", "draft", "sent", "accepted", "declined", "expired", "cancelled"];
 
@@ -55,15 +56,13 @@ export function quoteInput(
   today: string,
   units: Record<string, Unit> = {},
 ): { ok: true; input: { resellerId: number; lines: { productId: number; quantity: number }[]; note?: string; expiresOn: string } } | { ok: false; errors: DraftErrors } {
-  void units;
   const errors: DraftErrors = {};
   const quantities: Record<string, string> = {};
   const lines: { productId: number; quantity: number }[] = [];
   for (const [id, raw] of Object.entries(draft.quantities)) {
-    const typed = raw.trim();
-    if (typed === "" || typed === "0") continue;
-    if (!/^\d{1,4}$/.test(typed)) quantities[id] = "Enter a whole number from 0 to 9999";
-    else lines.push({ productId: Number(id), quantity: Number(typed) });
+    const parsed = parseQuantity(raw, units[id]);
+    if ("error" in parsed) quantities[id] = parsed.error;
+    else if (parsed.quantity !== null) lines.push({ productId: Number(id), quantity: parsed.quantity });
   }
   if (Object.keys(quantities).length) errors.quantities = quantities;
   else if (lines.length === 0) errors.lines = "Add at least one product";

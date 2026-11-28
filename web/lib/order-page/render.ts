@@ -2,6 +2,7 @@
 // the stylesheet and the optional script inlined; every action is a link or a form post.
 import type { CatalogView, OrderView, QuoteStatus, QuoteSummaryView, QuoteView } from "../api-types";
 import { formatClock, formatMoney, formatShortDate, QUOTE_STATUS_LABEL, quoteNumber, STATUS_LABEL, type Status } from "../format";
+import { quantityAttrs } from "../quantity";
 import { html, raw, type Html } from "./html";
 import { ORDER_PAGE_SCRIPT } from "./script";
 import { ORDER_PAGE_CSS } from "./styles";
@@ -63,7 +64,10 @@ export function priceListPage(
     ? html`<form method="post" action="${orderPath(token)}" id="order">
 <input type="hidden" name="idempotencyKey" value="${idempotencyKey}">
 <div class="rows">${catalog.products.map(
-        (p) => html`<label class="row${bad.has(p.id) ? " bad" : ""}" for="q${p.id}"><span><b>${p.name}</b><span class="small num">${p.unit} · ${formatMoney(p.price)}</span></span><input type="number" inputmode="numeric" min="0" max="9999" step="1" id="q${p.id}" name="q${p.id}" value="${state.quantities[String(p.id)] ?? "0"}" data-price="${p.price}" aria-label="Quantity of ${p.name}"></label>`,
+        (p) => {
+          const attrs = quantityAttrs(p.unit);
+          return html`<label class="row${bad.has(p.id) ? " bad" : ""}" for="q${p.id}"><span><b>${p.name}</b><span class="small num">${p.unit} · ${formatMoney(p.price)}</span></span><input type="number" inputmode="${attrs.inputMode}" min="0" max="9999" step="${attrs.step}" id="q${p.id}" name="q${p.id}" value="${state.quantities[String(p.id)] ?? "0"}" data-price="${p.price}" aria-label="Quantity of ${p.name}"></label>`;
+        },
       )}</div>
 <label class="block" for="note">Note for your supplier (optional)</label>
 <textarea id="note" name="note" maxlength="500" rows="3">${state.note}</textarea>

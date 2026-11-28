@@ -17,3 +17,12 @@ CREATE TABLE order_event (
      OR (actor_type = 'reseller' AND actor_reseller_id IS NOT NULL AND actor_user_id IS NULL))
 );
 CREATE INDEX order_event_order_idx ON order_event (tenant_id, order_id, at, id);
+
+-- History is append-only: nothing changes or removes an event after the fact.
+CREATE FUNCTION order_event_append_only() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'order_event is append-only';
+END;
+$$;
+CREATE TRIGGER order_event_append_only BEFORE UPDATE OR DELETE ON order_event
+  FOR EACH ROW EXECUTE FUNCTION order_event_append_only();

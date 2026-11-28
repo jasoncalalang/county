@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "e2e": "playwright test",
+    "e2e:real": "playwright test -c playwright.real.config.ts",
     "postbuild": "cp -r .next/static .next/standalone/.next/static"
   },
   "dependencies": {

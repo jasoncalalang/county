@@ -40,4 +40,6 @@ Each file is a story on its own owner, so tenants never share data.
 - `demo.spec.ts`: the functional spec section 10 demo script, the settings preview, and the
   no-JavaScript order page with cancel.
 - `quotes.spec.ts`: draft, send, accept, decline, and the owner seeing the order.
+- `discrepancy.spec.ts`: short-delivery reports: the reseller reports with JavaScript off and the
+  owner approves it, then the owner reports on a second order and the reseller declines.
 - `isolation.spec.ts`: two owners, one UI each, and guessed ids.

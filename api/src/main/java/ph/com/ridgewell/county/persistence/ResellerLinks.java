@@ -35,7 +35,7 @@ public class ResellerLinks {
   }
 
   /** A 128-bit random token in 22 URL-safe characters. */
-  String newToken() {
+  private String newToken() {
     byte[] bytes = new byte[16];
     RANDOM.nextBytes(bytes);
     return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);

@@ -12,16 +12,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalTime;
 import java.util.*;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import ph.com.ridgewell.county.api.*;
-import ph.com.ridgewell.county.domain.PhilippineMobile;
 
 @ApplicationScoped
 public class Owners {
-  @ConfigProperty(name = "county.public-url")
-  String publicUrl;
-
-  @Inject ResellerLinks links;
+  @Inject Resellers resellers;
 
   /** The business owned by the signed-in Google subject, or 404. */
   static Business tenant(String subject) {
@@ -162,63 +157,6 @@ public class Owners {
     return view(product);
   }
 
-  @Transactional
-  public List<Views.Reseller> resellers(String subject) {
-    long tenant = tenant(subject).id;
-    Map<Long, Object> lastOrders = new HashMap<>();
-    for (Object[] row :
-        SalesOrder.getEntityManager()
-            .createQuery(
-                "select o.resellerId, max(o.placedAt) from SalesOrder o"
-                    + " where o.tenantId = ?1 group by o.resellerId",
-                Object[].class)
-            .setParameter(1, tenant)
-            .getResultList()) lastOrders.put((Long) row[0], row[1]);
-    return Reseller.<Reseller>list("tenantId", Sort.by("id"), tenant).stream()
-        .map(r -> view(r, lastOrders.get(r.id)))
-        .toList();
-  }
-
-  @Transactional
-  public Views.Reseller reseller(String subject, Long id, Inputs.Reseller input) {
-    long tenant = tenant(subject).id;
-    String mobile;
-    try {
-      mobile = PhilippineMobile.normalize(input.mobile());
-    } catch (IllegalArgumentException e) {
-      throw Problem.field("mobile", e.getMessage());
-    }
-    Reseller reseller;
-    if (id == null) {
-      reseller = new Reseller();
-      reseller.tenantId = tenant;
-      links.issue(reseller);
-    } else
-      reseller =
-          Reseller.inTenant(tenant, id, PESSIMISTIC_WRITE)
-              .orElseThrow(() -> new Problem(404, "Not found"));
-    reseller.name = input.name().trim();
-    reseller.mobile = mobile;
-    reseller.persist();
-    Reseller.flush();
-    return view(reseller, null);
-  }
-
-  @Transactional
-  public Views.Reseller resellerAction(String subject, long id, String action) {
-    var reseller =
-        Reseller.inTenant(tenant(subject).id, id, PESSIMISTIC_WRITE)
-            .orElseThrow(() -> new Problem(404, "Not found"));
-    switch (action) {
-      case "block" -> reseller.status = "blocked";
-      case "unblock" -> reseller.status = reseller.hasOrdered ? "active" : "invited";
-      case "reissue-link" -> links.issue(reseller);
-      default -> throw new Problem(404, "Not found");
-    }
-    Reseller.flush();
-    return view(reseller, null);
-  }
-
   static Views.Business view(Business b) {
     return new Views.Business(
         b.id, b.name, Times.clock(b.cutoff), Arrays.asList(b.deliveryDays));
@@ -226,19 +164,6 @@ public class Owners {
 
   private static Views.Product view(Product p) {
     return new Views.Product(p.id, p.name, p.unit, p.price, p.active);
-  }
-
-  private Views.Reseller view(Reseller r, Object lastOrderAt) {
-    return new Views.Reseller(
-        r.id,
-        r.name,
-        r.mobile,
-        r.status,
-        r.token,
-        publicUrl.replaceAll("/$", "") + "/order/" + r.token,
-        Times.instant(r.tokenExpiresAt),
-        lastOrderAt == null ? null : Times.instant((java.time.Instant) lastOrderAt),
-        r.priceTierId);
   }
 
   @Transactional
@@ -337,6 +262,6 @@ public class Owners {
       reseller.priceTierId = tier.id;
     }
     Reseller.flush();
-    return view(reseller, null);
+    return resellers.view(reseller, null);
   }
 }

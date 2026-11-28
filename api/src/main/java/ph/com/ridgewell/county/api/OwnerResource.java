@@ -95,38 +95,6 @@ public class OwnerResource {
   }
 
   @GET
-  @Path("resellers")
-  public List<Views.Reseller> resellers() {
-    return owners.resellers(subject());
-  }
-
-  @POST
-  @Path("resellers")
-  @APIResponse(
-      responseCode = "201",
-      content = @Content(schema = @Schema(implementation = Views.Reseller.class)))
-  public Response reseller(@jakarta.validation.constraints.NotNull @Valid Inputs.Reseller input) {
-    return Response.status(201)
-        .entity(owners.reseller(subject(), null, input))
-        .build();
-  }
-
-  @PUT
-  @Path("resellers/{id}")
-  public Views.Reseller reseller(
-      @PathParam("id") long id,
-      @jakarta.validation.constraints.NotNull @Valid Inputs.Reseller input) {
-    return owners.reseller(subject(), id, input);
-  }
-
-  @POST
-  @Path("resellers/{id}/{action:block|unblock|reissue-link}")
-  public Views.Reseller resellerAction(
-      @PathParam("id") long id, @PathParam("action") String action) {
-    return owners.resellerAction(subject(), id, action);
-  }
-
-  @GET
   @Path("production-run")
   public Views.ProductionRun production(@QueryParam("date") String date) {
     return orders.production(subject(), date);

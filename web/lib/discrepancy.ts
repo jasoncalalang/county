@@ -51,6 +51,11 @@ export function receivedText(line: { orderedQuantity: number; receivedQuantity: 
   return `${line.receivedQuantity} of ${line.orderedQuantity} ${line.unit}`;
 }
 
+/** "The reseller reported this Fri 11:00 AM", then how it was answered, from the viewer's side. */
+export function reportTimeline(report: DiscrepancyView, viewer: DiscrepancyParty): string[] {
+  throw new Error("not implemented");
+}
+
 export function canFile(orderStatus: Status, hasReport: boolean): boolean {
   return orderStatus === "delivered" && !hasReport;
 }

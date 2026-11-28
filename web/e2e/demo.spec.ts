@@ -389,3 +389,108 @@ test("short delivery: the reseller reports 8 of 10 received, with JavaScript off
   await expect(page.getByRole("link", { name: "Report a problem with this delivery" })).toHaveCount(0);
   await context.close();
 });
+
+test("short delivery: the wholesaler sees the open report, opens the order and approves it", async ({ browser, baseURL }) => {
+  const signedOut = await browser.newPage();
+  await signedOut.goto("/discrepancies");
+  await expect(signedOut).toHaveURL(/\/$/);
+
+  const page = await signedIn(browser, baseURL!);
+  await page.goto("/orders");
+  await page.getByRole("navigation", { name: "Dashboard" }).getByRole("link", { name: "Delivery reports" }).click();
+  await expect(page).toHaveURL(/\/discrepancies$/);
+  await expect(page.getByRole("heading", { name: "Delivery reports" })).toBeVisible();
+  const row = page.getByRole("row", { name: /#1/ });
+  await expect(row.getByText("Aling Rosa")).toBeVisible();
+  await expect(row.getByText("₱240.00 short")).toBeVisible();
+  await shot(page, "17-delivery-reports");
+
+  await row.getByRole("link", { name: "#1" }).click();
+  await expect(page.getByRole("heading", { name: "Order #1" })).toBeVisible();
+  const report = page.getByRole("region", { name: "Delivery report" });
+  await expect(report.getByText("Open", { exact: true })).toBeVisible();
+  await expect(report.getByRole("cell", { name: "8 of 10 pack" })).toBeVisible();
+  await expect(report.getByRole("cell", { name: "₱240.00 short" })).toBeVisible();
+  await expect(report.getByText("2 packs were crushed")).toBeVisible();
+  await expect(report.getByText(/^The reseller reported this /)).toBeVisible();
+  await shot(page, "18-report-on-order");
+
+  await report.getByRole("button", { name: "Approve" }).click();
+  const dialog = page.getByRole("dialog", { name: "Approve this report?" });
+  await dialog.getByLabel("Note for the reseller (optional)").fill("Sorry about that");
+  await dialog.getByRole("button", { name: "Approve report" }).click();
+  await expect(report.getByText("Approved", { exact: true })).toBeVisible();
+  await expect(report.getByText("Sorry about that")).toBeVisible();
+  await expect(report.getByText(/^You approved this /)).toBeVisible();
+  await expect(report.getByRole("button", { name: "Approve" })).toHaveCount(0);
+  await expect(report.getByRole("button", { name: "Decline" })).toHaveCount(0);
+
+  await page.goto("/discrepancies");
+  await expect(page.getByRole("heading", { name: "No open reports" })).toBeVisible();
+});
+
+test("short delivery: the reseller sees Approved", async ({ browser, request }) => {
+  const id = await orderIdOf(request, 1);
+  const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  await page.goto(`${link}/orders/${id}`);
+  await expect(page.getByText("Approved", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "View report" }).click();
+  await expect(page.getByText("Approved", { exact: true })).toBeVisible();
+  await expect(page.getByText("Your supplier approved this")).toBeVisible();
+  await expect(page.getByText("Sorry about that")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
+  await shot(page, "19-report-approved");
+  await context.close();
+});
+
+test("short delivery: the wholesaler files a report from the order and the reseller declines it", async ({ browser, baseURL, request }) => {
+  // Order #3 came from the accepted quote: 10 pack at 120.00 and 2 kg of Tocino at 320.00.
+  const id = await orderIdOf(request, 3);
+  const as = { headers: { authorization: "Bearer e2e" } };
+  expect((await request.post(`${API}/orders/${id}/confirm`, as)).status()).toBe(200);
+  expect((await request.post(`${API}/orders/${id}/deliver`, { ...as, data: { paid: false } })).status()).toBe(200);
+
+  const page = await signedIn(browser, baseURL!);
+  await page.goto(`/orders/${id}`);
+  await page.getByRole("button", { name: "Report a short delivery" }).click();
+  const dialog = page.getByRole("dialog", { name: "Report a short delivery" });
+  await expect(dialog.getByLabel("Received quantity of Tocino")).toHaveValue("2");
+  await dialog.getByRole("button", { name: "File report" }).click();
+  await expect(dialog.getByText("Change at least one received quantity to report a problem.")).toBeVisible();
+  await dialog.getByLabel("Received quantity of Tocino").fill("1.5");
+  await dialog.getByLabel("Note for the reseller (optional)").fill("Scale showed 1.5 kg");
+  await shot(page, "20-file-report");
+  await dialog.getByRole("button", { name: "File report" }).click();
+
+  const report = page.getByRole("region", { name: "Delivery report" });
+  await expect(report.getByText("Open", { exact: true })).toBeVisible();
+  await expect(report.getByRole("cell", { name: "1.5 of 2 kg" })).toBeVisible();
+  await expect(report.getByRole("cell", { name: "₱160.00 short" })).toBeVisible();
+  await expect(report.getByText("Scale showed 1.5 kg")).toBeVisible();
+  await expect(report.getByText(/^You reported this /)).toBeVisible();
+  await expect(report.getByText("Waiting for the reseller to answer.")).toBeVisible();
+  await expect(report.getByRole("button", { name: "Approve" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Report a short delivery" })).toHaveCount(0);
+
+  const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
+  const reseller = await context.newPage();
+  await reseller.goto(`${link}/orders/${id}`);
+  await reseller.getByRole("link", { name: "View report" }).click();
+  await expect(reseller.getByRole("heading", { name: "Delivery report for order #3" })).toBeVisible();
+  await expect(reseller.getByText("Your supplier reported this")).toBeVisible();
+  await expect(reseller.getByText("Scale showed 1.5 kg")).toBeVisible();
+  await reseller.getByRole("button", { name: "Decline" }).click();
+  await expect(reseller.getByRole("heading", { name: "Decline this report?" })).toBeVisible();
+  await reseller.getByLabel("Note for your supplier (optional)").fill("Please weigh it again");
+  await reseller.getByRole("button", { name: "Decline report" }).click();
+  await expect(reseller.getByText("Declined", { exact: true })).toBeVisible();
+  await expect(reseller.getByText("Please weigh it again")).toBeVisible();
+  await expect(reseller.getByText("You declined this")).toBeVisible();
+  await context.close();
+
+  await page.reload();
+  await expect(report.getByText("Declined", { exact: true })).toBeVisible();
+  await expect(report.getByText("Please weigh it again")).toBeVisible();
+  await expect(report.getByText(/^The reseller declined this /)).toBeVisible();
+});

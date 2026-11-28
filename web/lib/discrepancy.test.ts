@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import type { DiscrepancyView } from "./api-types";
 import {
   canFile,
   canResolve,
@@ -7,6 +8,7 @@ import {
   partyLabel,
   receivedDefaults,
   receivedText,
+  reportTimeline,
   resolveBody,
   shortfallText,
   DISCREPANCY_STATUS_LABEL,
@@ -204,5 +206,41 @@ describe("who may do what", () => {
     expect(resolveBody("   ")).toEqual({});
     expect(resolveBody("  fine  ")).toEqual({ note: "fine" });
     expect(resolveBody("x".repeat(600)).note).toHaveLength(500);
+  });
+});
+
+describe("reportTimeline", () => {
+  const open: DiscrepancyView = {
+    id: 5,
+    orderId: 41,
+    orderNumber: 9,
+    filedBy: "reseller",
+    filedAt: "2026-11-27T03:00:00Z",
+    status: "open",
+    note: "",
+    resolutionNote: "",
+    resolvedBy: null,
+    resolvedAt: null,
+    shortfallTotal: 240,
+    lines: [],
+  };
+
+  test("an open report says who filed it and when, in Manila time", () => {
+    expect(reportTimeline(open, "owner")).toEqual(["The reseller reported this Fri 11:00 AM"]);
+    expect(reportTimeline(open, "reseller")).toEqual(["You reported this Fri 11:00 AM"]);
+    expect(reportTimeline({ ...open, filedBy: "owner" }, "reseller")).toEqual(["Your supplier reported this Fri 11:00 AM"]);
+  });
+
+  test("an answered report adds who answered, what they did and when", () => {
+    const approved = { ...open, status: "approved", resolvedBy: "owner", resolvedAt: "2026-11-28T01:30:00Z" } as DiscrepancyView;
+    expect(reportTimeline(approved, "owner")).toEqual([
+      "The reseller reported this Fri 11:00 AM",
+      "You approved this Sat 9:30 AM",
+    ]);
+    const declined = { ...approved, status: "declined" } as DiscrepancyView;
+    expect(reportTimeline(declined, "reseller")).toEqual([
+      "You reported this Fri 11:00 AM",
+      "Your supplier declined this Sat 9:30 AM",
+    ]);
   });
 });

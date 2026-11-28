@@ -1,9 +1,10 @@
+{{- $labels := include "county.labels" (dict "root" . "component" "web") -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: county-web
   labels:
-    {{- include "county.labels" (dict "root" . "component" "web") | nindent 4 }}
+    {{- $labels | nindent 4 }}
 data:
   COUNTY_API_URL: http://county-api:8080/api
   AUTH_URL: {{ printf "%s/auth" (include "county.publicUrl" .) | quote }}

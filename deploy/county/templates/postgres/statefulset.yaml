@@ -1,9 +1,10 @@
+{{- $labels := include "county.labels" (dict "root" . "component" "postgres") -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: county-postgres
   labels:
-    {{- include "county.labels" (dict "root" . "component" "postgres") | nindent 4 }}
+    {{- $labels | nindent 4 }}
 spec:
   replicas: 1
   serviceName: county-postgres
@@ -14,11 +15,11 @@ spec:
     whenScaled: Retain
   selector:
     matchLabels:
-      {{- include "county.labels" (dict "root" . "component" "postgres") | nindent 6 }}
+      {{- $labels | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "county.labels" (dict "root" . "component" "postgres") | nindent 8 }}
+        {{- $labels | nindent 8 }}
     spec:
       securityContext:
         runAsNonRoot: true
@@ -58,7 +59,7 @@ spec:
     - metadata:
         name: data
         labels:
-          {{- include "county.labels" (dict "root" . "component" "postgres") | nindent 10 }}
+          {{- $labels | nindent 10 }}
       spec:
         accessModes: [ReadWriteOnce]
         storageClassName: {{ .Values.postgres.storageClass }}

@@ -1,13 +1,1 @@
-apiVersion: v1
-kind: Service
-metadata:
-  name: county-api
-  labels:
-    {{- include "county.labels" (dict "root" . "component" "api") | nindent 4 }}
-spec:
-  selector:
-    {{- include "county.labels" (dict "root" . "component" "api") | nindent 4 }}
-  ports:
-    - name: http
-      port: 8080
-      targetPort: http
+{{ include "county.service" (dict "root" . "component" "api" "port" 8080 "portName" "http") }}

@@ -43,3 +43,24 @@ capabilities:
 seccompProfile:
   type: RuntimeDefault
 {{- end -}}
+
+{{/* The Service of one component, named county-<component>; headless for the StatefulSet. */}}
+{{- define "county.service" -}}
+{{- $labels := include "county.labels" (dict "root" .root "component" .component) -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: county-{{ .component }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  {{- if .headless }}
+  clusterIP: None
+  {{- end }}
+  selector:
+    {{- $labels | nindent 4 }}
+  ports:
+    - name: {{ .portName }}
+      port: {{ .port }}
+      targetPort: {{ .portName }}
+{{- end -}}

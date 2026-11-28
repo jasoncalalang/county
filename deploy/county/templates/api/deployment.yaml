@@ -1,9 +1,10 @@
+{{- $labels := include "county.labels" (dict "root" . "component" "api") -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: county-api
   labels:
-    {{- include "county.labels" (dict "root" . "component" "api") | nindent 4 }}
+    {{- $labels | nindent 4 }}
 spec:
   replicas: {{ .Values.api.replicas }}
   strategy:
@@ -13,11 +14,11 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      {{- include "county.labels" (dict "root" . "component" "api") | nindent 6 }}
+      {{- $labels | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "county.labels" (dict "root" . "component" "api") | nindent 8 }}
+        {{- $labels | nindent 8 }}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/api/configmap.yaml") . | sha256sum }}
     spec:

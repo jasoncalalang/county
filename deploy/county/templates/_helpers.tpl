@@ -64,3 +64,41 @@ spec:
       port: {{ .port }}
       targetPort: {{ .portName }}
 {{- end -}}
+
+{{/* A peer matching the pods of one component. */}}
+{{- define "county.podPeer" -}}
+podSelector:
+  matchLabels:
+    {{- include "county.labels" . | nindent 4 }}
+{{- end -}}
+
+{{/* A peer matching every pod of the ingress controller's namespace. */}}
+{{- define "county.ingressNamespacePeer" -}}
+namespaceSelector:
+  matchLabels:
+    kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressNamespace }}
+{{- end -}}
+
+{{/* Admits TCP traffic to one component's pods from the listed peers (rendered YAML maps) and nothing else. */}}
+{{- define "county.networkPolicy" -}}
+{{- $labels := include "county.labels" (dict "root" .root "component" .component) -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: county-{{ .component }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- $labels | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- range .from }}
+        - {{ . | indent 10 | trim }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .port }}
+{{- end -}}

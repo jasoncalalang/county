@@ -93,7 +93,20 @@ reseller's own name and the business name for what the owner did, never the owne
 email. A database trigger rejects `UPDATE` and `DELETE` of an event (`TRUNCATE` is not
 covered). Placement has no event: `placedAt` records it.
 
-Date filters are delivery dates. Money is decimal PHP, quantity whole units. Status
+Fractional quantities (W1, ADR 0017): a line's `quantity` is a decimal above 0 and at most 9999 with up
+to three decimal places, on orders and quotes alike; a fourth decimal, zero, a negative, a non-number
+and an out-of-range value are all 422 keyed `lines[i].quantity`, as is a huge exponent such as `1e400`
+(one too large for the parser to hold is a 400). Only a `kg` product takes a fraction; a fraction of a
+`pack` or `pc` is a 422 on the same key. A line total is the unit price times the quantity, rounded half
+up to centavos, and must come to at least 0.01 and fit `numeric(12,2)`; the order total is the sum of the
+rounded lines, so the lines shown always add up. Quantities leave the API without trailing zeros (`10`,
+`1.5`). An accepted quote copies its lines as captured, never re-rounded. The database holds the quantity
+as `numeric(7,3)` with a `quantity > 0 AND quantity <= 9999` check on `order_line` and `quote_line`.
+`Pricing` prices submitted lines for both orders and quotes under the existing lock order. Deploy V7 with
+the release that reads decimals: the previous release would read a fractional row truncated (1.5 kg as
+1), so do not serve it beside this one once fractional orders exist.
+
+Date filters are delivery dates. Money is decimal PHP, quantity up to three decimals. Status
 strings are lowercase. The order list includes each order's `resellerName` and its
 `items` (product name, unit, quantity) so a dashboard row needs no further calls;
 order detail includes `resellerName` too. The settings preview takes unsaved values,

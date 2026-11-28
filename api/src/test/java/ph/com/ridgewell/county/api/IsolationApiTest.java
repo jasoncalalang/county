@@ -350,6 +350,59 @@ class IsolationApiTest {
 
   @Test
   @TestSecurity(
+      user = "isolation-fractional",
+      roles = {"user"})
+  @OidcSecurity(claims = {@Claim(key = "sub", value = "isolation-fractional")})
+  void anotherTenantsFractionalLinesAreNotInTheProductionRun() throws SQLException {
+    Fixture own = fixture("isolation-fractional");
+    Fixture other = fixture("fractional-foreign-" + UUID.randomUUID());
+    String date;
+    try (Connection c = dataSource.getConnection()) {
+      for (Fixture f : new Fixture[] {own, other})
+        TestSql.execute(c, "UPDATE product SET unit='kg' WHERE id=?", f.product);
+      long mine = placeFraction(own, "0.5");
+      long theirs = placeFraction(other, "1.5");
+      date = TestSql.one(c, "SELECT delivery_date::text AS d FROM sales_order WHERE id=?", mine)
+          .get("d").toString();
+      TestSql.execute(
+          c,
+          "UPDATE sales_order SET status='confirmed', confirmed_at=now() WHERE id IN (?,?)",
+          mine,
+          theirs);
+    }
+    given()
+        .basePath("")
+        .get("/api/production-run?date=" + date)
+        .then()
+        .statusCode(200)
+        .body("lines", hasSize(1))
+        .body("lines[0].productId", is((int) own.product))
+        .body("lines[0].quantity", is(0.5f))
+        .body("lines[0].orderCount", is(1));
+  }
+
+  private long placeFraction(Fixture f, String quantity) {
+    return given()
+        .basePath("")
+        .contentType("application/json")
+        .body(
+            "{\"lines\":[{\"productId\":"
+                + f.product
+                + ",\"quantity\":"
+                + quantity
+                + "}],\"idempotencyKey\":\""
+                + UUID.randomUUID()
+                + "\"}")
+        .post("/api/order/" + f.token + "/orders")
+        .then()
+        .statusCode(201)
+        .extract()
+        .jsonPath()
+        .getLong("id");
+  }
+
+  @Test
+  @TestSecurity(
       user = "isolation-request-scope",
       roles = {"user"})
   @OidcSecurity(claims = {@Claim(key = "sub", value = "isolation-request-scope")})

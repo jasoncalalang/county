@@ -8,6 +8,7 @@ import type { ProductView, QuoteView, ResellerView } from "@/lib/api-types";
 import { ApiError, useApi } from "@/lib/dashboard/api";
 import { apiErrors, defaultExpiry, quoteInput, type DraftErrors } from "@/lib/dashboard/quotes";
 import { formatMoney, manilaDate, quoteNumber } from "@/lib/format";
+import { quantityAttrs } from "@/lib/quantity";
 import { Placeholder, useShell } from "../../_components/shell";
 import ui from "../../../ui.module.css";
 
@@ -43,7 +44,8 @@ export default function NewQuotePage() {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const checked = quoteInput({ resellerId, quantities, expiresOn, note }, manilaDate(new Date()));
+    const units = Object.fromEntries((products ?? []).map((p) => [String(p.id), p.unit]));
+    const checked = quoteInput({ resellerId, quantities, expiresOn, note }, manilaDate(new Date()), units);
     if (!checked.ok) {
       setErrors(checked.errors);
       return;
@@ -113,6 +115,7 @@ export default function NewQuotePage() {
           <div className={ui.lineRows}>
             {products.map((p) => {
               const error = errors.quantities?.[String(p.id)];
+              const attrs = quantityAttrs(p.unit);
               return (
                 <div key={p.id} className={ui.lineRow}>
                   <span>
@@ -133,10 +136,10 @@ export default function NewQuotePage() {
                   <input
                     id={`qty-${p.id}`}
                     type="number"
-                    inputMode="numeric"
+                    inputMode={attrs.inputMode}
                     min={0}
                     max={9999}
-                    step={1}
+                    step={attrs.step}
                     placeholder="0"
                     aria-label={`Quantity of ${p.name}`}
                     aria-invalid={Boolean(error)}

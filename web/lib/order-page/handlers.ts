@@ -1,5 +1,6 @@
 // Request handling for the reseller routes under app/order. Kept apart from the route files so
 // the tests can pass a fake fetch.
+import { parseQuantity } from "../quantity";
 import { resellerApi, type Fetch } from "./api";
 import {
   confirmCancelPage,
@@ -60,6 +61,10 @@ export async function showPriceList(token: string, fetchImpl?: Fetch, state?: Fo
 
 export async function placeOrder(token: string, form: FormData, fetchImpl?: Fetch): Promise<Response> {
   const api = resellerApi(fetchImpl);
+  // The units say which rows take decimals; the API applies the same rule again.
+  const catalog = await api.catalog(token);
+  if (!catalog.ok) return catalog.status === 404 ? inactive() : htmlResponse(unavailablePage(token), 503);
+  const units = new Map(catalog.body.products.map((p) => [p.id, p.unit]));
   const note = String(form.get("note") ?? "").slice(0, 500);
   const key = String(form.get("idempotencyKey") ?? "");
   const quantities: Record<string, string> = {};
@@ -71,13 +76,9 @@ export async function placeOrder(token: string, form: FormData, fetchImpl?: Fetc
     const productId = Number(match[1]);
     const typed = String(value).trim();
     quantities[match[1]] = typed;
-    if (typed === "" || typed === "0") continue;
-    if (!/^\d{1,4}$/.test(typed)) {
-      errors.push({ productId, message: "Enter a whole number from 0 to 9999." });
-      continue;
-    }
-    const quantity = Number(typed);
-    if (quantity > 0) lines.push({ productId, quantity });
+    const parsed = parseQuantity(typed, units.get(productId));
+    if ("error" in parsed) errors.push({ productId, message: `${parsed.error}.` });
+    else if (parsed.quantity !== null) lines.push({ productId, quantity: parsed.quantity });
   }
   const again = (more: FormState["errors"]) =>
     showPriceList(token, fetchImpl, { quantities, note, errors: [...errors, ...more] });

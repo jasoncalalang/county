@@ -94,6 +94,69 @@ class ConcurrentOrderingTest {
     }
   }
 
+  @Test
+  void concurrentFractionalOrdersStillNumberSequentially() throws Exception {
+    String token = UUID.randomUUID().toString().replace("-", "").substring(0, 22);
+    long tenant, product;
+    try (Connection c = source.getConnection()) {
+      tenant = TestOwners.createBusiness(c, UUID.randomUUID().toString());
+      product =
+          insert(
+              c,
+              "INSERT INTO product(tenant_id,name,unit,price) VALUES (?,'Rice','kg',120)"
+                  + " RETURNING id",
+              tenant);
+      insert(
+          c,
+          "INSERT INTO reseller(tenant_id,name,mobile,token) VALUES (?,'Rosa','+639171234567',?)"
+              + " RETURNING id",
+          tenant,
+          token);
+    }
+    // 1.5 x 120 = 180.00, 0.333 x 120 = 39.96, 2.25 x 120 = 270.00, 0.5 x 120 = 60.00
+    String[] quantities = {"1.5", "0.333", "2.25", "0.5"};
+    var ready = new CountDownLatch(quantities.length);
+    var start = new CountDownLatch(1);
+    try (var pool = Executors.newFixedThreadPool(quantities.length)) {
+      var results = new ArrayList<Future<io.restassured.response.Response>>();
+      for (String quantity : quantities)
+        results.add(
+            pool.submit(
+                () -> {
+                  ready.countDown();
+                  start.await();
+                  return given()
+                      .basePath("")
+                      .contentType("application/json")
+                      .body(body(product, quantity, UUID.randomUUID()))
+                      .post("/api/order/" + token + "/orders");
+                }));
+      assertTrue(ready.await(10, TimeUnit.SECONDS));
+      start.countDown();
+      Set<Long> numbers = new TreeSet<>();
+      List<Double> totals = new ArrayList<>();
+      for (var future : results) {
+        var response = future.get(30, TimeUnit.SECONDS);
+        assertEquals(201, response.statusCode(), response.asString());
+        numbers.add(response.jsonPath().getLong("number"));
+        totals.add(response.jsonPath().getDouble("total"));
+      }
+      assertEquals(Set.of(1L, 2L, 3L, 4L), numbers);
+      Collections.sort(totals);
+      assertEquals(List.of(39.96, 60.0, 180.0, 270.0), totals);
+    }
+  }
+
+  static String body(long product, String quantity, UUID key) {
+    return "{\"lines\":[{\"productId\":"
+        + product
+        + ",\"quantity\":"
+        + quantity
+        + "}],\"idempotencyKey\":\""
+        + key
+        + "\"}";
+  }
+
   static String body(long product, int quantity, UUID key) {
     return "{\"lines\":[{\"productId\":"
         + product

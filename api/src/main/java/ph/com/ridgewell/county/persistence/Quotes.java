@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
 import ph.com.ridgewell.county.api.*;
+import ph.com.ridgewell.county.domain.Quantity;
 import ph.com.ridgewell.county.domain.QuoteRules;
 import ph.com.ridgewell.county.domain.QuoteRules.Actor;
 import ph.com.ridgewell.county.domain.QuoteRules.Status;
@@ -30,6 +31,7 @@ import ph.com.ridgewell.county.domain.QuoteRules.Status;
 @ApplicationScoped
 public class Quotes {
   @Inject Orders orders;
+  @Inject Pricing pricing;
 
   public record Acceptance(boolean replay, Views.Order order) {}
 
@@ -77,7 +79,7 @@ public class Quotes {
       throw Problem.field("expiresOn", "Choose today or a later day");
     // The business lock allocates the quote number without gaps.
     Business business = Business.findById(tenant, PESSIMISTIC_WRITE);
-    var priced = Orders.price(reseller, input.lines());
+    var priced = pricing.price(reseller, input.lines());
     var q = new Quote();
     q.tenantId = tenant;
     q.resellerId = reseller.id;
@@ -321,7 +323,12 @@ public class Quotes {
             .map(
                 l ->
                     new Views.QuoteLine(
-                        l.productId, l.productName, l.unit, l.quantity, l.price, l.total))
+                        l.productId,
+                        l.productName,
+                        l.unit,
+                        Quantity.wire(l.quantity),
+                        l.price,
+                        l.total))
             .toList());
   }
 }

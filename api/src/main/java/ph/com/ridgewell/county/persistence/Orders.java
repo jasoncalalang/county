@@ -1,7 +1,6 @@
 package ph.com.ridgewell.county.persistence;
 
 import static jakarta.persistence.LockModeType.NONE;
-import static jakarta.persistence.LockModeType.PESSIMISTIC_READ;
 import static jakarta.persistence.LockModeType.PESSIMISTIC_WRITE;
 
 import io.quarkus.panache.common.Sort;
@@ -23,9 +22,9 @@ import ph.com.ridgewell.county.domain.*;
 @ApplicationScoped
 public class Orders {
   static final ZoneId ZONE = ZoneId.of("Asia/Manila");
-  private static final BigDecimal MAXIMUM = new BigDecimal("9999999999.99");
 
   @Inject OrderHistory history;
+  @Inject Pricing pricing;
 
   public record Placement(boolean replay, Views.Order order) {}
 
@@ -108,48 +107,6 @@ public class Orders {
     return resellerView(order(reseller.tenantId, id, reseller.id, NONE));
   }
 
-  /** A submitted line priced for a reseller: the product as read under its lock. */
-  record PricedLine(Product product, int quantity, BigDecimal price, BigDecimal total) {}
-
-  record Priced(List<PricedLine> lines, BigDecimal total) {}
-
-  /**
-   * Prices lines for a reseller at today's prices: the reseller's tier price where one is set,
-   * else the product's base price. Share-locks each product in ascending id order, which guards
-   * its tier prices too, so call it after the reseller and business locks (ADR 0013). Refuses a
-   * repeated or inactive product; a field error names the line as submitted.
-   */
-  static Priced price(Reseller reseller, List<Inputs.Line> submitted) {
-    Map<Long, Integer> firstIndex = new HashMap<>();
-    for (int i = 0; i < submitted.size(); i++)
-      if (firstIndex.putIfAbsent(submitted.get(i).productId(), i) != null)
-        throw Problem.field(
-            "lines[" + i + "].productId", "This product is already on another line");
-    List<PricedLine> lines = new ArrayList<>();
-    BigDecimal total = new BigDecimal("0.00");
-    // Ascending product ids: a stable lock order avoids deadlocks with product edits.
-    for (var line : submitted.stream().sorted(Comparator.comparing(Inputs.Line::productId)).toList()) {
-      String field = "lines[" + firstIndex.get(line.productId()) + "]";
-      var product =
-          Product.inTenant(reseller.tenantId, line.productId(), PESSIMISTIC_READ)
-              .orElseThrow(() -> new Problem(404, "Not found"));
-      if (!product.active)
-        throw Problem.field(field + ".productId", product.name + " is no longer available");
-      // The product's read lock guards the tier price read.
-      BigDecimal unitPrice =
-          reseller.priceTierId == null
-              ? product.price
-              : ProductTierPrice.of(reseller.tenantId, product.id, reseller.priceTierId)
-                  .map(t -> t.price)
-                  .orElse(product.price);
-      var lineTotal = Money.line(unitPrice, line.quantity());
-      total = total.add(lineTotal);
-      if (total.compareTo(MAXIMUM) > 0) throw Problem.field("lines", "Order total is too large");
-      lines.add(new PricedLine(product, line.quantity(), unitPrice, lineTotal));
-    }
-    return new Priced(lines, total);
-  }
-
   @Transactional
   public Placement place(String token, Inputs.Place input) {
     var reseller = reseller(token, PESSIMISTIC_WRITE);
@@ -167,7 +124,7 @@ public class Orders {
         throw new Problem(409, "Idempotency key already used");
       return new Placement(true, resellerView(existing.get()));
     }
-    var priced = price(reseller, input.lines());
+    var priced = pricing.price(reseller, input.lines());
     List<OrderLine> lines = new ArrayList<>();
     for (var p : priced.lines()) {
       var saved = new OrderLine();
@@ -229,7 +186,7 @@ public class Orders {
             "tenantId = ?1 and orderId in ?2", Sort.by("orderId").and("id"), tenant, ids))
       items
           .computeIfAbsent(l.orderId, k -> new ArrayList<>())
-          .add(new Views.OrderItem(l.productName, l.unit, l.quantity));
+          .add(new Views.OrderItem(l.productName, l.unit, Quantity.wire(l.quantity)));
     Map<Long, String> names = resellerNames(tenant, found.stream().map(o -> o.resellerId).toList());
     return found.stream()
         .map(
@@ -289,7 +246,7 @@ public class Orders {
                         (Long) r[0],
                         (String) r[1],
                         (String) r[2],
-                        ((Number) r[3]).longValue(),
+                        Quantity.wire((BigDecimal) r[3]),
                         ((Number) r[4]).longValue()))
             .toList();
     long unconfirmed =
@@ -342,7 +299,12 @@ public class Orders {
             .map(
                 l ->
                     new Views.OrderLine(
-                        l.productId, l.productName, l.unit, l.quantity, l.price, l.total))
+                        l.productId,
+                        l.productName,
+                        l.unit,
+                        Quantity.wire(l.quantity),
+                        l.price,
+                        l.total))
             .toList(),
         events);
   }

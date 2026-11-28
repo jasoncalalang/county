@@ -1,8 +1,7 @@
 // The reseller's short-delivery pages: the form, the report and the confirmation that comes
 // before approving or declining. Every value from the API or the form goes through `html`.
 import type { DiscrepancyView, OrderView, Unit } from "../api-types";
-import { canResolve, partyLabel, receivedText, shortfallText, type FormErrors } from "../discrepancy";
-import { formatDayTime } from "../format";
+import { canResolve, partyLabel, receivedText, reportTimeline, shortfallText, type FormErrors } from "../discrepancy";
 import { quantityAttrs } from "../quantity";
 import { html, type Html } from "./html";
 import { orderPath, page, reportBadge } from "./render";
@@ -62,8 +61,9 @@ function resolveForm(token: string, report: DiscrepancyView, action: "approve" |
 export function reportPage(token: string, report: DiscrepancyView, notice?: string): string {
   const title = `Delivery report for order #${report.orderNumber}`;
   const who = partyLabel(report.filedBy, "reseller");
-  const answered = report.resolvedBy && report.resolvedAt
-    ? html`<p>${partyLabel(report.resolvedBy, "reseller")} ${report.status === "approved" ? "approved" : "declined"} this ${formatDayTime(report.resolvedAt)}</p>${report.resolutionNote ? html`<blockquote>${report.resolutionNote}</blockquote>` : ""}`
+  const [filed, resolved] = reportTimeline(report, "reseller");
+  const answered = resolved
+    ? html`<p>${resolved}</p>${report.resolutionNote ? html`<blockquote>${report.resolutionNote}</blockquote>` : ""}`
     : "";
   const next = canResolve(report, "reseller")
     ? html`<p class="small">Approve if this is right, or decline.</p><div class="actions">${resolveForm(token, report, "approve", "Approve", "primary")}${resolveForm(token, report, "decline", "Decline", "text danger")}</div>`
@@ -74,7 +74,7 @@ export function reportPage(token: string, report: DiscrepancyView, notice?: stri
     title,
     html`${notice ? html`<p class="errors" role="alert">${notice}</p>` : ""}<div class="card">
 <h1 class="title">${title}</h1>
-<p>${reportBadge(report.status)} <span class="small">${who} reported this ${formatDayTime(report.filedAt)}</span></p>
+<p>${reportBadge(report.status)} <span class="small">${filed}</span></p>
 <table><thead><tr><th scope="col">Product</th><th scope="col" class="r">Received</th><th scope="col" class="r">Difference</th></tr></thead>
 <tbody>${report.lines.map(
       (l) => html`<tr><td>${l.productName}</td><td class="r">${receivedText(l)}</td><td class="r">${shortfallText(l.shortfallTotal)}</td></tr>`,

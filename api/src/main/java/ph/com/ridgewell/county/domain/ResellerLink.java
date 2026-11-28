@@ -11,11 +11,11 @@ public final class ResellerLink {
 
   /** When a link issued at {@code issuedAt} stops working. */
   public static Instant expiry(Instant issuedAt) {
-    throw new UnsupportedOperationException();
+    return issuedAt.plus(LIFETIME);
   }
 
   /** Whether a link that expires at {@code expiresAt} still works at {@code now}. */
   public static boolean active(Instant expiresAt, Instant now) {
-    throw new UnsupportedOperationException();
+    return now.isBefore(expiresAt);
   }
 }

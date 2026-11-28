@@ -12,18 +12,18 @@ public final class Inputs {
   private Inputs() {}
 
   public record Business(
-      @NotBlank @Size(max = 80) String name,
+      @NotBlank @Size(max = 80) @Storable String name,
       @NotNull String cutoff,
       @NotEmpty Set<@NotNull @Min(1) @Max(7) Integer> deliveryDays) {}
 
   public record Product(
-      @NotBlank @Size(max = 80) String name,
+      @NotBlank @Size(max = 80) @Storable String name,
       @Pattern(regexp = "pack|kg|pc") @NotNull String unit,
       @NotNull @DecimalMin(value = "0", inclusive = false) @Digits(integer = 10, fraction = 2)
           BigDecimal price,
       Boolean active) {}
 
-  public record Reseller(@NotBlank @Size(max = 80) String name, @NotBlank String mobile) {}
+  public record Reseller(@NotBlank @Size(max = 80) @Storable String name, @NotBlank String mobile) {}
 
   public record Line(
       @NotNull @Positive Long productId,
@@ -38,12 +38,12 @@ public final class Inputs {
 
   public record Place(
       @NotEmpty @Size(max = 50) List<@NotNull @Valid Line> lines,
-      @Size(max = 500) String note,
+      @Size(max = 500) @Storable String note,
       @NotNull UUID idempotencyKey) {}
 
   public record Deliver(@NotNull Boolean paid) {}
 
-  public record PriceTier(@NotBlank @Size(max = 80) String name, Boolean active) {}
+  public record PriceTier(@NotBlank @Size(max = 80) @Storable String name, Boolean active) {}
 
   public record TierPrice(
       @NotNull @DecimalMin(value = "0", inclusive = false) @Digits(integer = 10, fraction = 2)
@@ -58,7 +58,7 @@ public final class Inputs {
   public record Quote(
       @NotNull @Positive Long resellerId,
       @NotEmpty @Size(max = 50) List<@NotNull @Valid Line> lines,
-      @Size(max = 500) String note,
+      @Size(max = 500) @Storable String note,
       @NotNull
           @org.eclipse.microprofile.openapi.annotations.media.Schema(
               description = "Last day the reseller can accept, in the business timezone")
@@ -80,8 +80,8 @@ public final class Inputs {
 
   public record Discrepancy(
       @NotEmpty @Size(max = 50) List<@NotNull @Valid DiscrepancyLine> lines,
-      @Size(max = 500) String note,
+      @Size(max = 500) @Storable String note,
       @NotNull UUID idempotencyKey) {}
 
-  public record Resolve(@Size(max = 500) String note) {}
+  public record Resolve(@Size(max = 500) @Storable String note) {}
 }

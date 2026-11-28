@@ -378,7 +378,7 @@ class LabelsTest(unittest.TestCase):
             with self.subTest(object=f"{doc['kind']}/{doc['metadata']['name']}"):
                 self.assertEqual(labels["app.kubernetes.io/name"], "county")
                 self.assertEqual(labels["app.kubernetes.io/instance"], "county")
-                self.assertIn(labels["app.kubernetes.io/component"], ("api", "web", "postgres"))
+                self.assertIn(labels["app.kubernetes.io/component"], ("api", "web", "postgres", "ingress"))
 
     def test_the_release_name_is_the_instance(self):
         result = helm("template", "other", str(CHART), "-f", str(DEMO_VALUES), "--set-string", f"image.tag={SHA}")
@@ -424,6 +424,93 @@ class LabelsTest(unittest.TestCase):
     def test_deleting_the_release_keeps_the_claim(self):
         spec = find(objects(), "StatefulSet", "county-postgres")["spec"]
         self.assertEqual(spec["persistentVolumeClaimRetentionPolicy"], {"whenDeleted": "Retain", "whenScaled": "Retain"})
+
+
+class IngressTest(unittest.TestCase):
+    """C2"""
+
+    def ingress(self, *sets):
+        return find(objects(*sets), "Ingress", "county")
+
+    def paths(self, ingress):
+        rules = ingress["spec"]["rules"]
+        self.assertEqual(len(rules), 1)
+        return rules[0]["http"]["paths"]
+
+    def test_exactly_two_paths_api_and_web(self):
+        paths = self.paths(self.ingress())
+        routes = {p["path"]: (p["pathType"], p["backend"]["service"]["name"], p["backend"]["service"]["port"]["number"])
+                  for p in paths}
+        self.assertEqual(len(paths), 2)
+        self.assertEqual(routes, {"/api": ("Prefix", "county-api", 8080), "/": ("Prefix", "county-web", 3000)})
+
+    def test_the_q_endpoints_are_not_routed(self):
+        for path in self.paths(self.ingress()):
+            self.assertFalse(path["path"].startswith("/q"), path["path"])
+
+    def test_there_is_no_tls_section(self):
+        self.assertNotIn("tls", self.ingress()["spec"])
+
+    def test_the_host_is_the_one_in_public_url(self):
+        self.assertEqual(self.ingress()["spec"]["rules"][0]["host"], "county.example.ph")
+        ingress = self.ingress("publicUrl=https://orders.test.example")
+        self.assertEqual(ingress["spec"]["rules"][0]["host"], "orders.test.example")
+
+    def test_the_class_is_nginx_and_a_value(self):
+        self.assertEqual(self.ingress()["spec"]["ingressClassName"], "nginx")
+        self.assertEqual(self.ingress("ingress.className=traefik")["spec"]["ingressClassName"], "traefik")
+
+    def test_ingress_enabled_false_renders_no_ingress(self):
+        self.assertEqual([d for d in objects("ingress.enabled=false") if d["kind"] == "Ingress"], [])
+
+    def test_the_ingress_is_labelled(self):
+        labels = self.ingress()["metadata"]["labels"]
+        self.assertEqual(labels["app.kubernetes.io/name"], "county")
+        self.assertEqual(labels["app.kubernetes.io/component"], "ingress")
+
+
+class NetworkPolicyTest(unittest.TestCase):
+    """C4"""
+
+    INGRESS_NAMESPACE = {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "ingress-nginx"}}}
+
+    def pods(self, component):
+        return {"podSelector": {"matchLabels": {"app.kubernetes.io/name": "county",
+                                                "app.kubernetes.io/instance": "county",
+                                                "app.kubernetes.io/component": component}}}
+
+    def policy(self, name, *sets):
+        return find(objects(*sets), "NetworkPolicy", name)
+
+    def assertAllows(self, name, peers, port, *sets):
+        policy = self.policy(name, *sets)
+        self.assertEqual(policy["spec"]["podSelector"], self.pods(name.removeprefix("county-"))["podSelector"])
+        self.assertEqual(policy["spec"]["policyTypes"], ["Ingress"])
+        self.assertEqual(len(policy["spec"]["ingress"]), 1)
+        rule = policy["spec"]["ingress"][0]
+        self.assertEqual(rule["from"], peers)
+        self.assertEqual(rule["ports"], [{"protocol": "TCP", "port": port}])
+
+    def test_postgres_accepts_5432_from_api_pods_only(self):
+        self.assertAllows("county-postgres", [self.pods("api")], 5432)
+
+    def test_api_accepts_8080_from_web_and_the_ingress_namespace(self):
+        self.assertAllows("county-api", [self.pods("web"), self.INGRESS_NAMESPACE], 8080)
+
+    def test_web_accepts_3000_from_the_ingress_namespace_only(self):
+        self.assertAllows("county-web", [self.INGRESS_NAMESPACE], 3000)
+
+    def test_the_ingress_namespace_is_a_value(self):
+        peers = [self.pods("web"), {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "traefik"}}}]
+        self.assertAllows("county-api", peers, 8080, "networkPolicy.ingressNamespace=traefik")
+
+    def test_the_policies_are_labelled(self):
+        for name in ("county-api", "county-web", "county-postgres"):
+            labels = self.policy(name)["metadata"]["labels"]
+            self.assertEqual(labels["app.kubernetes.io/component"], name.removeprefix("county-"))
+
+    def test_network_policy_disabled_renders_none(self):
+        self.assertEqual([d for d in objects("networkPolicy.enabled=false") if d["kind"] == "NetworkPolicy"], [])
 
 
 if __name__ == "__main__":

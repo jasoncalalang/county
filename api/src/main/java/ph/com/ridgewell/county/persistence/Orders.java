@@ -25,13 +25,9 @@ public class Orders {
 
   @Inject OrderHistory history;
   @Inject Pricing pricing;
+  @Inject ResellerLinks links;
 
   public record Placement(boolean replay, Views.Order order) {}
-
-  static Reseller reseller(String token, LockModeType lock) {
-    if (token == null || !token.matches("[A-Za-z0-9_-]{22}")) throw new Problem(404, "Not found");
-    return Reseller.byToken(token, Times.now(), lock).orElseThrow(() -> new Problem(404, "Not found"));
-  }
 
   static LocalDate delivery(Business business) {
     return delivery(business.cutoff, business.deliveryDays);
@@ -65,7 +61,7 @@ public class Orders {
 
   @Transactional
   public Views.Catalog catalog(String token) {
-    var reseller = reseller(token, NONE);
+    var reseller = links.resolve(token, NONE);
     Business business = Business.findById(reseller.tenantId);
     Map<Long, BigDecimal> tierPrices = tierPrices(reseller);
     return new Views.Catalog(
@@ -103,13 +99,13 @@ public class Orders {
 
   @Transactional
   public Views.Order getPublic(String token, long id) {
-    var reseller = reseller(token, NONE);
+    var reseller = links.resolve(token, NONE);
     return resellerView(order(reseller.tenantId, id, reseller.id, NONE));
   }
 
   @Transactional
   public Placement place(String token, Inputs.Place input) {
-    var reseller = reseller(token, PESSIMISTIC_WRITE);
+    var reseller = links.resolve(token, PESSIMISTIC_WRITE);
     // The business lock serializes numbering and the idempotency check for this business.
     Business business = Business.findById(reseller.tenantId, PESSIMISTIC_WRITE);
     var existing =

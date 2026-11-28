@@ -32,6 +32,7 @@ import ph.com.ridgewell.county.domain.QuoteRules.Status;
 public class Quotes {
   @Inject Orders orders;
   @Inject Pricing pricing;
+  @Inject ResellerLinks links;
 
   public record Acceptance(boolean replay, Views.Order order) {}
 
@@ -184,7 +185,7 @@ public class Quotes {
   /** Sent quotes the reseller can still accept, newest first. */
   @Transactional
   public List<Views.QuoteSummary> open(String token) {
-    var reseller = Orders.reseller(token, NONE);
+    var reseller = links.resolve(token, NONE);
     return Quote.<Quote>list(
             "tenantId = ?1 and resellerId = ?2 and status = 'sent' and expiresOn >= ?3",
             Sort.descending("number"),
@@ -198,13 +199,13 @@ public class Quotes {
 
   @Transactional
   public Views.Quote getPublic(String token, long id) {
-    var reseller = Orders.reseller(token, NONE);
+    var reseller = links.resolve(token, NONE);
     return view(visible(reseller, id, NONE));
   }
 
   @Transactional
   public Views.Quote decline(String token, long id) {
-    var reseller = Orders.reseller(token, NONE);
+    var reseller = links.resolve(token, NONE);
     var q = visible(reseller, id, PESSIMISTIC_WRITE);
     move(q, Status.DECLINED, Actor.RESELLER);
     q.status = Status.DECLINED.wire();
@@ -222,7 +223,7 @@ public class Quotes {
   @Transactional
   public Acceptance accept(String token, long id, Inputs.AcceptQuote input) {
     // Accepting marks the reseller as having ordered, as placing does: hence the write lock.
-    var reseller = Orders.reseller(token, PESSIMISTIC_WRITE);
+    var reseller = links.resolve(token, PESSIMISTIC_WRITE);
     // Serializes order numbering and the idempotency check for this business.
     Business business = Business.findById(reseller.tenantId, PESSIMISTIC_WRITE);
     var q = visible(reseller, id, PESSIMISTIC_WRITE);

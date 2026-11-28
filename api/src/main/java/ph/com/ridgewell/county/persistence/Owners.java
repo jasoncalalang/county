@@ -6,23 +6,22 @@ import static jakarta.persistence.LockModeType.PESSIMISTIC_WRITE;
 
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.security.SecureRandom;
 import java.time.LocalTime;
 import java.util.*;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import ph.com.ridgewell.county.api.*;
 import ph.com.ridgewell.county.domain.PhilippineMobile;
-import ph.com.ridgewell.county.domain.ResellerLink;
 
 @ApplicationScoped
 public class Owners {
   @ConfigProperty(name = "county.public-url")
   String publicUrl;
 
-  private static final SecureRandom RANDOM = new SecureRandom();
+  @Inject ResellerLinks links;
 
   /** The business owned by the signed-in Google subject, or 404. */
   static Business tenant(String subject) {
@@ -193,8 +192,7 @@ public class Owners {
     if (id == null) {
       reseller = new Reseller();
       reseller.tenantId = tenant;
-      reseller.token = token();
-      reseller.tokenExpiresAt = ResellerLink.expiry(Times.now());
+      links.issue(reseller);
     } else
       reseller =
           Reseller.inTenant(tenant, id, PESSIMISTIC_WRITE)
@@ -214,7 +212,7 @@ public class Owners {
     switch (action) {
       case "block" -> reseller.status = "blocked";
       case "unblock" -> reseller.status = reseller.hasOrdered ? "active" : "invited";
-      case "reissue-link" -> reseller.token = token();
+      case "reissue-link" -> reseller.token = links.newToken();
       default -> throw new Problem(404, "Not found");
     }
     Reseller.flush();
@@ -340,11 +338,5 @@ public class Owners {
     }
     Reseller.flush();
     return view(reseller, null);
-  }
-
-  private static String token() {
-    byte[] bytes = new byte[16];
-    RANDOM.nextBytes(bytes);
-    return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
   }
 }

@@ -21,8 +21,8 @@ npm run e2e:real -- --trace off
 
 The database defaults to `county_e2e` on `localhost:5432`, user `county`, password
 `test-only`. Override with `E2E_DB_HOST`, `E2E_DB_PORT`, `E2E_DB_NAME`, `E2E_DB_USER` and
-`E2E_DB_PASSWORD`; `E2E_API_JAR` points at a jar elsewhere, and `E2E_PREBUILT=1` skips the
-web build when you already ran `npm run build`. Every run creates a schema named
+`E2E_DB_PASSWORD`; `E2E_API_JAR` points at a jar elsewhere. The web build runs again under this tier's
+API origin, because `next.config.ts` bakes `COUNTY_DEV_API_ORIGIN` into the build. Every run creates a schema named
 `county_e2e_<timestamp>` and never drops it, as the API tests do.
 
 ## Sign-in

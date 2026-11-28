@@ -48,8 +48,9 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     {
-      // E2E_PREBUILT=1 skips the build when an earlier step already ran `npm run build`.
-      command: process.env.E2E_PREBUILT ? "npm run start" : "npm run build && npm run start",
+      // Built here, not reused from an earlier `npm run build`: next.config.ts bakes
+      // COUNTY_DEV_API_ORIGIN into the build, and this tier's API listens on another port.
+      command: "npm run build && npm run start",
       env: {
         PORT: String(WEB_PORT),
         HOSTNAME: "127.0.0.1",

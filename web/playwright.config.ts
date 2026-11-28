@@ -21,8 +21,7 @@ export default defineConfig({
           reuseExistingServer: !process.env.CI,
         },
         {
-          // E2E_PREBUILT=1 skips the build when an earlier step already ran `npm run build`.
-          command: process.env.E2E_PREBUILT ? "npm run start" : "npm run build && npm run start",
+          command: "npm run build && npm run start",
           env: {
             PORT: String(port),
             HOSTNAME: "127.0.0.1",

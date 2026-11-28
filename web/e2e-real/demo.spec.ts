@@ -122,7 +122,10 @@ test("7-10: the wholesaler confirms, delivers, marks paid and blocks", async ({ 
   await page.getByRole("link", { name: "#1" }).first().click();
   await expect(page.getByRole("heading", { name: "Order #1" })).toBeVisible();
   await expect(page.getByText("before 7am")).toBeVisible();
-  await expect(page.getByText(/^Paid \w{3} /)).toBeVisible();
+  await expect(page.getByText(/^Placed \w{3} .+ by Aling Rosa$/)).toBeVisible();
+  await expect(page.getByText(/^Confirmed \w{3} .+ by E2E Owner$/)).toBeVisible();
+  await expect(page.getByText(/^Delivered \w{3} .+ by E2E Owner$/)).toBeVisible();
+  await expect(page.getByText(/^Marked paid \w{3} .+ by E2E Owner$/)).toBeVisible();
 
   await page.getByRole("link", { name: "Resellers" }).click();
   const rosa = page.getByRole("row", { name: /Aling Rosa/ });

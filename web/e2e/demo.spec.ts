@@ -494,3 +494,52 @@ test("short delivery: the wholesaler files a report from the order and the resel
   await expect(report.getByText("Please weigh it again")).toBeVisible();
   await expect(report.getByText(/^The reseller declined this /)).toBeVisible();
 });
+
+/** The calendar date of an instant in Manila as the resellers page words it, such as `26 Feb 2027`. */
+function manilaDay(instant: Date): string {
+  const parts = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Manila" }).formatToParts(instant);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("day")} ${get("month")} ${get("year")}`;
+}
+
+test("link expiry: the owner sees when a link expires, an expired one is marked, and reissuing gives 90 days", async ({ browser, baseURL, request }) => {
+  const inNinetyDays = manilaDay(new Date(Date.now() + 90 * 86_400_000));
+  const page = await signedIn(browser, baseURL!);
+  await page.goto("/resellers");
+  await page.getByRole("button", { name: "Add reseller" }).first().click();
+  const add = page.getByRole("dialog", { name: "Add reseller" });
+  await add.getByLabel("Name").fill("Ka Bert");
+  await add.getByLabel("Mobile number").fill("0918 765 4321");
+  await add.getByRole("button", { name: "Add", exact: true }).click();
+  const reveal = page.getByRole("dialog", { name: "Send this link to Ka Bert" });
+  await expect(reveal.getByText(`Link expires ${inNinetyDays}`)).toBeVisible();
+  const oldLink = (await reveal.locator("div", { hasText: "/order/" }).last().textContent())!.trim();
+  await reveal.getByRole("button", { name: "Done" }).click();
+
+  const bert = page.getByRole("row", { name: /Ka Bert/ });
+  await expect(bert.getByText(`Link expires ${inNinetyDays}`)).toBeVisible();
+  await expect(bert.getByRole("button", { name: "Link", exact: true })).toBeVisible();
+
+  // Ninety days pass: the fake API moves this link's expiry into the past.
+  const token = oldLink.split("/").pop();
+  expect((await request.post(`${API}/__expire/${token}`)).status()).toBe(204);
+  await page.reload();
+  await expect(bert.getByText(`Link expired ${manilaDay(new Date())}`)).toBeVisible();
+  await expect(bert.getByRole("button", { name: "Link", exact: true })).toHaveCount(0);
+  const gone = await (await browser.newPage()).goto(oldLink);
+  expect(gone?.status()).toBe(404);
+
+  await bert.getByRole("button", { name: "Reissue link" }).click();
+  await page.getByRole("dialog", { name: "Reissue the link for Ka Bert?" }).getByRole("button", { name: "Reissue" }).click();
+  const fresh = page.getByRole("dialog", { name: "Send this link to Ka Bert" });
+  await expect(fresh.getByText(`Link expires ${inNinetyDays}`)).toBeVisible();
+  const newLink = (await fresh.locator("div", { hasText: "/order/" }).last().textContent())!.trim();
+  expect(newLink).not.toBe(oldLink);
+  await fresh.getByRole("button", { name: "Done" }).click();
+  await expect(bert.getByText(`Link expires ${inNinetyDays}`)).toBeVisible();
+  await expect(bert.getByRole("button", { name: "Link", exact: true })).toBeVisible();
+
+  const orderPage = await browser.newPage();
+  await orderPage.goto(newLink);
+  await expect(orderPage.getByText("Ordering as Ka Bert")).toBeVisible();
+});

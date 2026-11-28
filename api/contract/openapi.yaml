@@ -737,6 +737,9 @@ components:
           type: string
         orderLink:
           type: string
+        linkExpiresAt:
+          type: string
+          format: date-time
         lastOrderAt:
           type:
           - string
@@ -1891,6 +1894,8 @@ paths:
       - SecurityScheme: []
   /api/resellers:
     get:
+      tags:
+      - Owner Resource
       responses:
         "200":
           description: OK
@@ -1905,11 +1910,11 @@ paths:
         "403":
           description: Not Allowed
       summary: Resellers
-      tags:
-      - Owner Resource
       security:
       - SecurityScheme: []
     post:
+      tags:
+      - Owner Resource
       requestBody:
         content:
           application/json:
@@ -1929,12 +1934,12 @@ paths:
         "400":
           description: Bad Request
       summary: Reseller
-      tags:
-      - Owner Resource
       security:
       - SecurityScheme: []
   /api/resellers/{id}:
     put:
+      tags:
+      - Owner Resource
       parameters:
       - name: id
         in: path
@@ -1962,8 +1967,31 @@ paths:
         "400":
           description: Bad Request
       summary: Reseller
+      security:
+      - SecurityScheme: []
+  /api/resellers/{id}/block:
+    post:
       tags:
       - Owner Resource
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResellerView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Block
       security:
       - SecurityScheme: []
   /api/resellers/{id}/price-tier:
@@ -1999,15 +2027,11 @@ paths:
       - Owner Resource
       security:
       - SecurityScheme: []
-  /api/resellers/{id}/{action}:
+  /api/resellers/{id}/reissue-link:
     post:
+      tags:
+      - Owner Resource
       parameters:
-      - name: action
-        in: path
-        required: true
-        schema:
-          type: string
-          pattern: block|unblock|reissue-link
       - name: id
         in: path
         required: true
@@ -2025,9 +2049,32 @@ paths:
           description: Not Authorized
         "403":
           description: Not Allowed
-      summary: Reseller Action
+      summary: Reissue Link
+      security:
+      - SecurityScheme: []
+  /api/resellers/{id}/unblock:
+    post:
       tags:
       - Owner Resource
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResellerView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Unblock
       security:
       - SecurityScheme: []
   /api/settings:

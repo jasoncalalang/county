@@ -44,6 +44,7 @@ public final class Views {
       @Schema(enumeration = {"invited", "active", "blocked"}) String status,
       String token,
       String orderLink,
+      @Schema(format = "date-time") String linkExpiresAt,
       @Schema(format = "date-time", nullable = true) String lastOrderAt,
       @Schema(nullable = true) Long priceTierId) {}
 

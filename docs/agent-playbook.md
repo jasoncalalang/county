@@ -112,7 +112,7 @@ build. If `./gradlew` is not executable, `chmod +x api/gradlew` — do not subst
 | Data | `business`, `product`, `reseller`, `purchase_order`, `order_line`, `app_user`, `external_identity` |
 | Guarantees already implemented | pessimistic lock ordering; advisory lock on first sign-in; `(tenant_id, idempotency_key)` replay; back-button returns the same order |
 | Web | **stub**: `web/app/page.tsx` (one `<h1>`) + `web/app/healthz/route.ts`. No UI, no Auth.js wiring |
-| Known-honest gaps | no rate limiting, no audit trail, no pagination, no stock, no variants, no receipts |
+| Known-honest gaps | rate limiting is a Cloudflare edge rule on `/api/order/*`, not in the API; no audit trail, no pagination, no stock, no variants, no receipts |
 
 Verification commands (from `CLAUDE.md` / `api/README.md`):
 
@@ -135,7 +135,7 @@ provided `COUNTY_TEST_JDBC_URL`. Never point tests at production credentials.
 | ID | Item | Priority | Status | Blocked by |
 |---|---|---|---|---|
 | W1 | Widen quantities + introduce units | P0 | done (V7 migration; `measurement_unit` deferred, see W1) | — (D2: ADR 0017) |
-| W2 | Harden the public order surface | P0 | not started | — (D3: ADR 0018) |
+| W2 | Harden the public order surface | P0 | done (V9 migration; link expiry, reissue, dashboard; rate limiting is a Cloudflare edge rule) | — (D3: ADR 0018) |
 | W3 | `order_event` (actor-level history) | P0 | done (V6 migration) | — |
 | W4 | Rename `purchase_order` → `sales_order` | P0 | done (V5 migration) | — |
 | W5 | Web UI (owner screens + reseller page) | P0 | not started | — |
@@ -210,36 +210,33 @@ The `measurement_unit` table and `product.measurement_unit_id` above were left o
 units and ADR 0017 does not ask for them, so `product.unit` stays the unit. Build them with the first
 feature that reads them.
 
-### W2 — Harden the public order surface  *(P0, D3 decided: ADR 0018)*
+### W2 — Harden the public order surface  *(P0, D3 decided: ADR 0018; done)*
 
-**Why.** `POST /api/order/{token}/orders` is the only unauthenticated write. There is no rate limiting
-anywhere, tokens never expire, and nothing caps junk orders. Itemcount's comparable surfaces ship a
-reCAPTCHA site key and expiring invitation ids (`/partners/invitations/[invitationId]`).
+**Why.** `POST /api/order/{token}/orders` is the only unauthenticated write, and a link forwarded once
+worked forever. ADR 0018 gives a link a 90-day life. Rate limiting is not part of this item and not in the
+API: it is a Cloudflare rule on `/api/order/*` (Jason, 2026-11-26; `CLAUDE.md`; deployment spec sections 5
+and 11), and unknown, blocked and expired tokens are all the same 404, so probing a token learns nothing.
+There is no captcha (the reseller's page has no JavaScript, and that needs a product decision) and no
+per-token cap on orders.
 
-**Schema** — `V<next>__reseller_token_lifecycle.sql`
-- `reseller.token_expires_at TIMESTAMPTZ` (nullable; `NULL` = never expires, for backfill).
-- Backfill: `UPDATE reseller SET token_expires_at = now() + interval '90 days'` (ADR 0018).
+**As built.** `V9__reseller_link_expiry.sql` adds `reseller.token_expires_at TIMESTAMPTZ NOT NULL DEFAULT
+(now() + interval '90 days')`, which backfills existing links to 90 days from the migration and keeps
+inserts by the previous release working. The lifetime is the constant `domain/ResellerLink.LIFETIME`, not a
+setting. `persistence/ResellerLinks` is the one lookup for every `/api/order/{token}` operation: it refuses
+a malformed, unknown, blocked or expired token with the same `404 Not found`, and `Orders`, `OrderActions`,
+`Quotes` and `Discrepancies` use nothing else. Creating a reseller and `POST /resellers/{id}/reissue-link`
+issue a new token and a new 90 days; using a link, unblocking and editing never change the expiry, and no
+request carries it. `ResellerView.linkExpiresAt` shows it. The resellers page shows when each link expires,
+marks an expired one and offers "Reissue link". The reseller endpoints moved out of `Owners` and
+`OwnerResource` into `Resellers` and `OwnerResellerResource`, one method per action.
 
-**API / code**
-- New `api/RateLimits.java` as a `ContainerRequestFilter` bound to the reseller path, keyed by
-  `sha256(token)` and client IP, fixed-window or token bucket. Config in `application.properties`
-  (`county.rate-limit.place.permits`, `county.rate-limit.place.window`).
-- `ResellerResource` catalog/place: treat `token_expires_at < now()` exactly like blocked — same
-  `404` and the same "This link is no longer active" body. Do not add a new error shape.
-- `POST /resellers/{id}/reissue-link`: sets a new token **and** a new expiry.
-- Cap junk: reject more than `N` orders per token per day (`county.limits.orders-per-token-per-day`),
-  returning the existing problem shape with a clear message.
+**Tests.** `domain/ResellerLinkTest`, `api/ResellerLinkSchemaTest`, `api/ResellerLinkApiTest` (which walks
+every operation under `/api/order/{token}` in the contract and expects 404 for an expired link, so a new
+reseller endpoint that skips the lookup fails it), `api/IsolationApiTest`, `web/lib/dashboard/resellers.test.ts`
+and the link-expiry test in `web/e2e/demo.spec.ts`.
 
-**Tests to write first**
-- `api/RateLimitApiTest`: the `N+1`-th placement inside the window returns `429`; an owner request in the
-  same window is unaffected; a different token is unaffected.
-- `api/IsolationApiTest`: an expired token behaves identically to a blocked token (`404`, same body).
-- `api/ReviewRegressionTest`: reissue invalidates the old token and sets a future expiry.
-
-**Done when** the limits are configurable, defaulted off in `%test` except in the dedicated test profile,
-and `api/README.md` documents the new settings and the single-instance caveat of in-memory counters.
-
-**Do not** put a captcha in the reseller flow without a product decision — county's reseller has no JS.
+**Do not** add a rate limiter, a captcha or an order cap to the API without a new decision. Owners must
+reissue every link every 90 days; the dashboard is the only reminder.
 
 ### W3 — `order_event`: actor-level history  *(P0)*
 

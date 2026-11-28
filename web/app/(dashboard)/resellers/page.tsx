@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ResellerView } from "@/lib/api-types";
 import { ApiError, useApi } from "@/lib/dashboard/api";
 import { formatMobile, formatShortDate, manilaDate } from "@/lib/format";
+import { linkStatus } from "@/lib/dashboard/resellers";
 import { shareMessage } from "@/lib/dashboard/share";
 import { Dialog, DialogActions } from "../_components/dialog";
 import { Placeholder, useShell } from "../_components/shell";
@@ -28,6 +29,7 @@ export default function ResellersPage() {
   const [resellers, setResellers] = useState<ResellerView[] | null>(null);
   const [modal, setModal] = useState<Modal>(params.get("add") ? { kind: "add" } : null);
   const [busy, setBusy] = useState(false);
+  const [now] = useState(() => new Date());
 
   const load = useCallback(async () => {
     if (!api.ready) return;
@@ -77,27 +79,42 @@ export default function ResellersPage() {
     }
   }
 
-  const rowActions = (r: ResellerView) => (
-    <div className={ui.actions}>
-      <button type="button" className={ui.textButton} onClick={() => setModal({ kind: "reveal", reseller: r })}>
-        Link
-      </button>
-      {r.status === "blocked" ? (
-        <button type="button" className={ui.textButton} disabled={busy} onClick={() => action(r, "unblock")}>
-          Unblock
-        </button>
-      ) : (
-        <button type="button" className={ui.dangerButton} onClick={() => setModal({ kind: "block", reseller: r })}>
-          Block
-        </button>
-      )}
-      <button type="button" className={ui.textButton} onClick={() => setModal({ kind: "reissue", reseller: r })}>
-        Reissue
-      </button>
-    </div>
-  );
+  const rowActions = (r: ResellerView) => {
+    const expired = linkStatus(r, now).expired;
+    return (
+      <div className={ui.actions}>
+        {expired ? (
+          <button type="button" className={ui.textButton} onClick={() => setModal({ kind: "reissue", reseller: r })}>
+            Reissue link
+          </button>
+        ) : (
+          <button type="button" className={ui.textButton} onClick={() => setModal({ kind: "reveal", reseller: r })}>
+            Link
+          </button>
+        )}
+        {r.status === "blocked" ? (
+          <button type="button" className={ui.textButton} disabled={busy} onClick={() => action(r, "unblock")}>
+            Unblock
+          </button>
+        ) : (
+          <button type="button" className={ui.dangerButton} onClick={() => setModal({ kind: "block", reseller: r })}>
+            Block
+          </button>
+        )}
+        {!expired && (
+          <button type="button" className={ui.textButton} onClick={() => setModal({ kind: "reissue", reseller: r })}>
+            Reissue
+          </button>
+        )}
+      </div>
+    );
+  };
 
   const badge = (r: ResellerView) => <span className={`${ui.badge} ${ui[r.status]}`}>{STATUS[r.status]}</span>;
+  const expiry = (r: ResellerView) => {
+    const status = linkStatus(r, now);
+    return <span className={status.expired ? ui.dangerText : undefined}>{status.label}</span>;
+  };
   const lastOrder = (r: ResellerView) => (r.lastOrderAt ? formatShortDate(manilaDate(new Date(r.lastOrderAt))) : "No orders yet");
 
   return (
@@ -128,6 +145,7 @@ export default function ResellersPage() {
                   <th scope="col">Name</th>
                   <th scope="col">Mobile</th>
                   <th scope="col">Status</th>
+                  <th scope="col">Link</th>
                   <th scope="col">Last order</th>
                   <th scope="col">
                     <span className="visually-hidden">Actions</span>
@@ -142,6 +160,7 @@ export default function ResellersPage() {
                     </td>
                     <td className={ui.num}>{formatMobile(r.mobile)}</td>
                     <td>{badge(r)}</td>
+                    <td className={ui.small}>{expiry(r)}</td>
                     <td className={ui.small}>{lastOrder(r)}</td>
                     <td>{rowActions(r)}</td>
                   </tr>
@@ -159,6 +178,7 @@ export default function ResellersPage() {
                 <div className={ui.small}>
                   {formatMobile(r.mobile)} · {lastOrder(r)}
                 </div>
+                <div className={ui.small}>{expiry(r)}</div>
                 {rowActions(r)}
               </li>
             ))}
@@ -186,6 +206,7 @@ export default function ResellersPage() {
               Paste it into Viber, Messenger or SMS. Anyone with the link can order as {modal.reseller.name}.
             </p>
             <div className={ui.linkBox}>{modal.reseller.orderLink}</div>
+            <p className={ui.small}>{linkStatus(modal.reseller, now).label}.</p>
             <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
               <button type="button" className={ui.secondary} onClick={() => copy(modal.reseller.orderLink, "Link")}>
                 Copy link

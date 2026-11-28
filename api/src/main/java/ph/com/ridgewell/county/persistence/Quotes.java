@@ -17,6 +17,7 @@ import ph.com.ridgewell.county.domain.Quantity;
 import ph.com.ridgewell.county.domain.QuoteRules;
 import ph.com.ridgewell.county.domain.QuoteRules.Actor;
 import ph.com.ridgewell.county.domain.QuoteRules.Status;
+import ph.com.ridgewell.county.domain.ResellerStatus;
 
 /**
  * Quotes (build plan §3). The owner creates a quote for one reseller and sends it; the reseller
@@ -32,6 +33,7 @@ import ph.com.ridgewell.county.domain.QuoteRules.Status;
 public class Quotes {
   @Inject Orders orders;
   @Inject Pricing pricing;
+  @Inject ResellerLinks links;
 
   public record Acceptance(boolean replay, Views.Order order) {}
 
@@ -73,7 +75,7 @@ public class Quotes {
     var reseller =
         Reseller.inTenant(tenant, input.resellerId(), PESSIMISTIC_READ)
             .orElseThrow(() -> new Problem(404, "Not found"));
-    if (reseller.status.equals("blocked"))
+    if (reseller.status.equals(ResellerStatus.BLOCKED.wire()))
       throw Problem.field("resellerId", "This reseller is blocked");
     if (input.expiresOn().isBefore(today()))
       throw Problem.field("expiresOn", "Choose today or a later day");
@@ -184,7 +186,7 @@ public class Quotes {
   /** Sent quotes the reseller can still accept, newest first. */
   @Transactional
   public List<Views.QuoteSummary> open(String token) {
-    var reseller = Orders.reseller(token, NONE);
+    var reseller = links.resolve(token, NONE);
     return Quote.<Quote>list(
             "tenantId = ?1 and resellerId = ?2 and status = 'sent' and expiresOn >= ?3",
             Sort.descending("number"),
@@ -198,13 +200,13 @@ public class Quotes {
 
   @Transactional
   public Views.Quote getPublic(String token, long id) {
-    var reseller = Orders.reseller(token, NONE);
+    var reseller = links.resolve(token, NONE);
     return view(visible(reseller, id, NONE));
   }
 
   @Transactional
   public Views.Quote decline(String token, long id) {
-    var reseller = Orders.reseller(token, NONE);
+    var reseller = links.resolve(token, NONE);
     var q = visible(reseller, id, PESSIMISTIC_WRITE);
     move(q, Status.DECLINED, Actor.RESELLER);
     q.status = Status.DECLINED.wire();
@@ -222,7 +224,7 @@ public class Quotes {
   @Transactional
   public Acceptance accept(String token, long id, Inputs.AcceptQuote input) {
     // Accepting marks the reseller as having ordered, as placing does: hence the write lock.
-    var reseller = Orders.reseller(token, PESSIMISTIC_WRITE);
+    var reseller = links.resolve(token, PESSIMISTIC_WRITE);
     // Serializes order numbering and the idempotency check for this business.
     Business business = Business.findById(reseller.tenantId, PESSIMISTIC_WRITE);
     var q = visible(reseller, id, PESSIMISTIC_WRITE);
@@ -270,7 +272,7 @@ public class Quotes {
     q.acceptedAt = now;
     q.acceptedOrderId = order.id;
     reseller.hasOrdered = true;
-    reseller.status = "active";
+    reseller.status = ResellerStatus.ACTIVE.wire();
     SalesOrder.flush();
     return new Acceptance(false, Orders.view(order, lines));
   }

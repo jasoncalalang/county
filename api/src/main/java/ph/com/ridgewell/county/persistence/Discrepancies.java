@@ -41,6 +41,7 @@ import ph.com.ridgewell.county.domain.Unit;
 @ApplicationScoped
 public class Discrepancies {
   @Inject Clock clock;
+  @Inject ResellerLinks links;
 
   public record Filing(boolean replay, Views.Discrepancy report) {}
 
@@ -50,8 +51,8 @@ public class Discrepancies {
   }
 
   /** The link's reseller, write-locked, then the reseller's order, write-locked (ADR 0013). */
-  private static SalesOrder resellersOrder(String token, long orderId) {
-    var reseller = Orders.reseller(token, PESSIMISTIC_WRITE);
+  private SalesOrder resellersOrder(String token, long orderId) {
+    var reseller = links.resolve(token, PESSIMISTIC_WRITE);
     return Orders.order(reseller.tenantId, orderId, reseller.id, PESSIMISTIC_WRITE);
   }
 
@@ -75,7 +76,7 @@ public class Discrepancies {
 
   @Transactional
   public Views.Discrepancy forReseller(String token, long orderId) {
-    var reseller = Orders.reseller(token, NONE);
+    var reseller = links.resolve(token, NONE);
     var order = Orders.order(reseller.tenantId, orderId, reseller.id, NONE);
     return existing(order);
   }

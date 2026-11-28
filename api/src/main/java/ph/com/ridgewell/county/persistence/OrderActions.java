@@ -27,6 +27,7 @@ public class OrderActions {
   @Inject Clock clock;
   @Inject OrderHistory history;
   @Inject Orders orders;
+  @Inject ResellerLinks links;
 
   @Transactional
   public Views.Order confirm(String subject, long orderId) {
@@ -50,7 +51,7 @@ public class OrderActions {
 
   @Transactional
   public Views.Order cancelByReseller(String token, long orderId) {
-    var reseller = Orders.reseller(token, PESSIMISTIC_WRITE);
+    var reseller = links.resolve(token, PESSIMISTIC_WRITE);
     var order = Orders.order(reseller.tenantId, orderId, reseller.id, PESSIMISTIC_WRITE);
     Instant at = Times.now(clock);
     var from = move(order, CANCELLED, RESELLER);

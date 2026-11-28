@@ -65,11 +65,18 @@ Owner, quotes (Beyond v1; build plan §3 in county-architecture):
 placed now would be (tier price, else base price) and captures them. Only a sent quote
 shows on the reseller's link.
 
+Owner, short-delivery reports (Beyond v1; build plan §4 in county-architecture, ADR 0012):
+`POST /orders/{id}/discrepancy` (201; 200 when the same key is replayed), `GET /orders/{id}/discrepancy`,
+`POST /orders/{id}/discrepancy/{approve|decline}`, `GET /discrepancies?status=open|approved|declined`.
+
 Public reseller: `GET /order/{token}`, `POST /order/{token}/orders`,
 `GET /order/{token}/orders/{id}`, `POST /order/{token}/orders/{id}/cancel`,
 `GET /order/{token}/quotes` (open quotes), `GET /order/{token}/quotes/{id}`,
 `POST /order/{token}/quotes/{id}/accept` (body `{idempotencyKey}`; 201 with the new order,
 200 with the order an accepted quote already placed), `POST /order/{token}/quotes/{id}/decline`.
+
+Reseller, short-delivery reports: `POST /order/{token}/orders/{id}/discrepancy` (201; 200 replay),
+`GET /order/{token}/orders/{id}/discrepancy`, `POST /order/{token}/orders/{id}/discrepancy/{approve|decline}`.
 
 Accepting a quote places an order at the quote's captured prices, even if a product's
 price has changed or it has been deactivated since; placing an order directly uses today's
@@ -106,6 +113,32 @@ as `numeric(7,3)` with a `quantity > 0 AND quantity <= 9999` check on `order_lin
 the release that reads decimals: the previous release would read a fractional row truncated (1.5 kg as
 1), so do not serve it beside this one once fractional orders exist.
 
+Short-delivery reports (ADR 0012): a delivered order takes one report, filed by its reseller or by the
+owner, listing only the products whose received quantity differs from what was ordered (`lines`, 1 to
+50, each `{productId, receivedQuantity}`; products left out arrived as ordered), an optional `note` of
+at most 500 characters and an `idempotencyKey`. The report is a separate record: the order's lines,
+total, status and `paid` flag never change, and nothing is credited or refunded. It copies each line's
+name, unit, ordered quantity and price from the order line, so what the request says about those, about
+the shortfall, the filer or the status is ignored. `receivedQuantity` follows the quantity rule above
+(0 to 9999, up to three decimals, a fraction only of a `kg` product; 0 means nothing arrived) and may
+exceed the ordered quantity: over-delivery is accepted and gives a negative shortfall. A line equal to
+what was ordered is a 422. A line's shortfall is `(ordered - received) x price` rounded half up to
+centavos with the sign kept, the report's is the sum, and both must fit `numeric(12,2)` (422 on
+`lines[i].receivedQuantity`, or on `lines` for the sum); the figure is information only. A product not on
+the order is `lines[i].productId` "This product is not on the order", whether or not it exists. Filing
+on an order that is not delivered is 409 "Order is now <status>"; a second report on an order is 409
+"This order already has a report". A key replays (200, the same report) only for the same filer on the
+same order; the key of another order or of the other party is 409 "Idempotency key already used" with
+no report data. The other party resolves an open report once, as `approved` or `declined`, with an
+optional `note` of at most 500 characters (the body may be empty or `{}` but is still sent as JSON, like
+every JSON body here): the filer resolving their own report is 409 "Only the other party can resolve
+this report", and a resolved report is 409 "This report is now <status>". A report is read as 404 when
+there is none; `filedBy` and `resolvedBy` are `owner` or `reseller`, never an id or a name. The owner
+list, newest first, gives each report's order number and reseller name; an unknown or empty `status`
+filter is a 422 on `status`. A database trigger rejects `UPDATE` and `DELETE` of a line and `DELETE` of
+a report, lets an open report change only by being resolved (what was filed stays as it was), and lets a
+resolved one change no more (`TRUNCATE` is not covered).
+
 Date filters are delivery dates. Money is decimal PHP, quantity up to three decimals. Status
 strings are lowercase. The order list includes each order's `resellerName` and its
 `items` (product name, unit, quantity) so a dashboard row needs no further calls;
@@ -140,6 +173,11 @@ Do not log bearer tokens/order links. API responses are `no-store` with no refer
      lock target. Send, cancel and decline lock only the quote. Creating a quote takes no
      quote lock: it share-locks the reseller, locks the business for the quote number,
      then share-locks products by ascending id.
+
+  `discrepancy_report` and its lines are not a lock target: filing and resolving lock the order for
+  writing (the reseller first, on a reseller's request) and nothing locks a report on its own; the
+  report's key is checked and its row written under that order lock, and `UNIQUE (tenant_id, order_id)`
+  backs it up. Lines copy from the order's lines, so no product is locked.
 
   `order_event` is not a lock target: an action inserts its event after it has locked the
   order (and the reseller, for a reseller's cancel) and never locks an event. The row's foreign

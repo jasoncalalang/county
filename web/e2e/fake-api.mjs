@@ -8,7 +8,7 @@ const port = Number(process.env.FAKE_API_PORT ?? 3199);
 let db;
 
 function reset() {
-  db = { tenant: null, products: [], resellers: [], orders: [], quotes: [], nextId: 1, nextNumber: 1, nextQuote: 1, keys: new Map() };
+  db = { tenant: null, products: [], resellers: [], orders: [], quotes: [], reports: [], nextId: 1, nextNumber: 1, nextQuote: 1, keys: new Map() };
 }
 reset();
 
@@ -100,6 +100,91 @@ function quoteSummary(q) {
 }
 const quoteView = (q) => ({ ...q, ...quoteSummary(q), lines: q.lines.map((l) => ({ ...l })) });
 
+/**
+ * Short-delivery reports, with the API's rules: delivered orders only, one report per order,
+ * only lines that differ, the other party resolves, and a shortfall in centavos rounded half up
+ * with its sign kept, from integers so floats cannot drift.
+ */
+const shortfall = (price, ordered, received) => {
+  const diff = Math.round(ordered * 1000) - Math.round(received * 1000);
+  const cents = Math.floor((Math.abs(diff) * Math.round(price * 100) + 500) / 1000);
+  return (diff < 0 ? -cents : cents) / 100;
+};
+const reportFor = (o) => db.reports.find((r) => r.orderId === o.id);
+function reportView(r) {
+  const o = db.orders.find((y) => y.id === r.orderId);
+  const rest = { ...r };
+  delete rest.key;
+  return { ...rest, orderNumber: o.number, lines: r.lines.map((l) => ({ ...l })) };
+}
+function reportSummary(r) {
+  const o = db.orders.find((y) => y.id === r.orderId);
+  const { id, orderId, filedBy, status, shortfallTotal, filedAt } = r;
+  return { id, orderId, orderNumber: o.number, resellerId: o.resellerId, resellerName: resellerName(o), filedBy, status, shortfallTotal, filedAt };
+}
+function fileReport(res, o, filedBy, input) {
+  if (!/^[0-9a-f-]{36}$/i.test(input?.idempotencyKey ?? "")) return field(res, "idempotencyKey", "Enter a valid key");
+  if (!Array.isArray(input.lines) || input.lines.length < 1 || input.lines.length > 50) return field(res, "lines", "Report 1 to 50 products");
+  if ((input.note ?? "").length > 500) return field(res, "note", "Use 500 characters or fewer");
+  const seen = db.reports.find((r) => r.key === input.idempotencyKey);
+  if (seen) {
+    if (seen.orderId === o.id && seen.filedBy === filedBy) return send(res, 200, reportView(seen));
+    return problem(res, 409, "Idempotency key already used");
+  }
+  if (o.status !== "delivered") return problem(res, 409, `Order is now ${o.status}`);
+  if (reportFor(o)) return problem(res, 409, "This order already has a report");
+  const lines = [];
+  for (const [i, line] of input.lines.entries()) {
+    const ordered = o.lines.find((l) => l.productId === line.productId);
+    if (!ordered || lines.some((l) => l.productId === ordered.productId)) {
+      return field(res, `lines[${i}].productId`, ordered ? "This product is listed twice" : "This product is not on the order");
+    }
+    const received = line.receivedQuantity;
+    const path = `lines[${i}].receivedQuantity`;
+    if (typeof received !== "number" || !(received >= 0) || received > 9999) return field(res, path, "Enter a quantity from 0 to 9999");
+    if (Math.abs(received * 1000 - Math.round(received * 1000)) > 1e-6) return field(res, path, "Use up to three decimals");
+    if (ordered.unit !== "kg" && !Number.isInteger(received)) return field(res, path, `${ordered.productName} is sold by the ${ordered.unit}, so enter a whole number`);
+    if (received === ordered.quantity) return field(res, path, "Received quantity matches what was ordered");
+    lines.push({
+      productId: ordered.productId,
+      productName: ordered.productName,
+      unit: ordered.unit,
+      orderedQuantity: ordered.quantity,
+      receivedQuantity: received,
+      price: ordered.price,
+      shortfallTotal: shortfall(ordered.price, ordered.quantity, received),
+    });
+  }
+  const report = {
+    id: db.nextId++,
+    orderId: o.id,
+    filedBy,
+    filedAt: now(),
+    status: "open",
+    note: input.note ?? "",
+    resolutionNote: "",
+    resolvedBy: null,
+    resolvedAt: null,
+    shortfallTotal: sumTotals(lines.map((l) => ({ total: l.shortfallTotal }))),
+    lines,
+    key: input.idempotencyKey,
+  };
+  db.reports.push(report);
+  return send(res, 201, reportView(report));
+}
+async function resolveReport(req, res, o, viewer, action) {
+  // Like the API, a resolve is a JSON request even when it has no note.
+  if (!/^application\/json/.test(req.headers["content-type"] ?? "")) return problem(res, 415, "Unsupported Media Type");
+  const input = (await body(req)) ?? {};
+  const report = reportFor(o);
+  if (!report) return problem(res, 404, "Not found");
+  if ((input.note ?? "").length > 500) return field(res, "note", "Use 500 characters or fewer");
+  if (report.filedBy === viewer) return problem(res, 409, "Only the other party can resolve this report");
+  if (report.status !== "open") return problem(res, 409, `This report is now ${report.status}`);
+  Object.assign(report, { status: action === "approve" ? "approved" : "declined", resolvedBy: viewer, resolvedAt: now(), resolutionNote: input.note ?? "" });
+  return send(res, 200, reportView(report));
+}
+
 async function body(req) {
   let text = "";
   for await (const chunk of req) text += chunk;
@@ -155,6 +240,17 @@ createServer(async (req, res) => {
       reseller.status = "active";
       reseller.lastOrderAt = order.placedAt;
       return send(res, 201, orderView(order, "reseller"));
+    }
+
+    // Reseller (token) short-delivery routes
+    if ((x = m(/^\/order\/([^/]+)\/orders\/(\d+)\/discrepancy(?:\/(approve|decline))?$/))) {
+      const reseller = db.resellers.find((r) => r.token === x[1] && r.status !== "blocked");
+      const o = reseller && db.orders.find((y) => y.id === Number(x[2]) && y.resellerId === reseller.id);
+      if (!o) return problem(res, 404, "Not found");
+      if (x[3]) return resolveReport(req, res, o, "reseller", x[3]);
+      if (req.method === "POST") return fileReport(res, o, "reseller", await body(req));
+      const report = reportFor(o);
+      return report ? send(res, 200, reportView(report)) : problem(res, 404, "Not found");
     }
 
     // Reseller (token) routes
@@ -282,6 +378,20 @@ createServer(async (req, res) => {
         r.orderLink = `${process.env.PUBLIC_URL}/order/${r.token}`;
       }
       return send(res, 200, r);
+    }
+    if ((x = m(/^\/orders\/(\d+)\/discrepancy(?:\/(approve|decline))?$/))) {
+      const o = db.orders.find((y) => y.id === Number(x[1]));
+      if (!o) return problem(res, 404, "Not found");
+      if (x[2]) return resolveReport(req, res, o, "owner", x[2]);
+      if (req.method === "POST") return fileReport(res, o, "owner", await body(req));
+      const report = reportFor(o);
+      return report ? send(res, 200, reportView(report)) : problem(res, 404, "Not found");
+    }
+    if (path === "/discrepancies") {
+      const status = url.searchParams.get("status");
+      if (status !== null && !["open", "approved", "declined"].includes(status)) return field(res, "status", "Use open, approved or declined");
+      const found = db.reports.filter((r) => !status || r.status === status);
+      return send(res, 200, [...found].reverse().map(reportSummary));
     }
     if (path === "/orders") {
       const date = url.searchParams.get("date");

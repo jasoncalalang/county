@@ -1,4 +1,5 @@
-import type { QuoteStatus } from "@/lib/api-types";
+import type { DiscrepancyStatus, QuoteStatus } from "@/lib/api-types";
+import { DISCREPANCY_STATUS_LABEL } from "@/lib/discrepancy";
 import { QUOTE_STATUS_LABEL, STATUS_LABEL, type Status } from "@/lib/format";
 import ui from "../../ui.module.css";
 
@@ -14,4 +15,8 @@ export function PaidBadge({ status, paid }: { status: Status; paid: boolean }) {
 
 export function QuoteBadge({ status }: { status: QuoteStatus }) {
   return <span className={`${ui.badge} ${ui[status]}`}>{QUOTE_STATUS_LABEL[status]}</span>;
+}
+
+export function ReportBadge({ status }: { status: DiscrepancyStatus }) {
+  return <span className={`${ui.badge} ${ui[status]}`}>{DISCREPANCY_STATUS_LABEL[status]}</span>;
 }

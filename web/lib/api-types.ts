@@ -196,3 +196,52 @@ export interface QuoteInput {
   /** Last day the reseller can accept, `YYYY-MM-DD` in the business timezone. */
   expiresOn: string;
 }
+
+export type DiscrepancyStatus = "open" | "approved" | "declined";
+export type DiscrepancyParty = "owner" | "reseller";
+
+export interface DiscrepancyLineView {
+  productId: number;
+  productName: string;
+  unit: Unit;
+  orderedQuantity: number;
+  receivedQuantity: number;
+  price: number;
+  /** Negative when more arrived than was ordered. */
+  shortfallTotal: number;
+}
+
+export interface DiscrepancyView {
+  id: number;
+  orderId: number;
+  orderNumber: number;
+  filedBy: DiscrepancyParty;
+  filedAt: string;
+  status: DiscrepancyStatus;
+  note: string;
+  resolutionNote: string;
+  resolvedBy: DiscrepancyParty | null;
+  resolvedAt: string | null;
+  /** Information only: the order's total and paid flag never change. Negative for over-delivery. */
+  shortfallTotal: number;
+  lines: DiscrepancyLineView[];
+}
+
+export interface DiscrepancySummaryView {
+  id: number;
+  orderId: number;
+  orderNumber: number;
+  resellerId: number;
+  resellerName: string;
+  filedBy: DiscrepancyParty;
+  status: DiscrepancyStatus;
+  shortfallTotal: number;
+  filedAt: string;
+}
+
+/** Only the lines whose received quantity differs from the order are sent. */
+export interface DiscrepancyInput {
+  lines: { productId: number; receivedQuantity: number }[];
+  note?: string;
+  idempotencyKey: string;
+}

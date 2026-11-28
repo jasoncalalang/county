@@ -204,4 +204,41 @@ public final class Views {
       @Schema(format = "date-time", nullable = true) String declinedAt,
       @Schema(format = "date-time", nullable = true) String cancelledAt,
       List<QuoteLine> lines) {}
+
+  @Schema(name = "DiscrepancyLineView")
+  public record DiscrepancyLine(
+      long productId,
+      String productName,
+      @Schema(enumeration = {"pack", "kg", "pc"}) String unit,
+      BigDecimal orderedQuantity,
+      BigDecimal receivedQuantity,
+      BigDecimal price,
+      BigDecimal shortfallTotal) {}
+
+  @Schema(name = "DiscrepancyView")
+  public record Discrepancy(
+      long id,
+      long orderId,
+      long orderNumber,
+      @Schema(enumeration = {"owner", "reseller"}) String filedBy,
+      @Schema(format = "date-time") String filedAt,
+      @Schema(enumeration = {"open", "approved", "declined"}) String status,
+      String note,
+      String resolutionNote,
+      @Schema(enumeration = {"owner", "reseller"}, nullable = true) String resolvedBy,
+      @Schema(format = "date-time", nullable = true) String resolvedAt,
+      BigDecimal shortfallTotal,
+      List<DiscrepancyLine> lines) {}
+
+  @Schema(name = "DiscrepancySummaryView", description = "One report as the owner's list shows it")
+  public record DiscrepancySummary(
+      long id,
+      long orderId,
+      long orderNumber,
+      long resellerId,
+      String resellerName,
+      @Schema(enumeration = {"owner", "reseller"}) String filedBy,
+      @Schema(enumeration = {"open", "approved", "declined"}) String status,
+      BigDecimal shortfallTotal,
+      @Schema(format = "date-time") String filedAt) {}
 }

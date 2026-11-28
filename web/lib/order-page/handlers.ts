@@ -2,47 +2,16 @@
 // the tests can pass a fake fetch.
 import { parseQuantity } from "../quantity";
 import { resellerApi, type Fetch } from "./api";
+import { base, htmlResponse, inactive, orderId, PRICE_LIST_CACHE, redirect } from "./response";
 import {
   confirmCancelPage,
   confirmDeclinePage,
   confirmationPage,
-  inactivePage,
   priceListPage,
   quotePage,
   unavailablePage,
   type FormState,
 } from "./render";
-
-const HEADERS = {
-  "content-type": "text/html; charset=utf-8",
-  "cache-control": "no-store",
-  "referrer-policy": "no-referrer",
-  "x-robots-tag": "noindex",
-};
-
-function htmlResponse(body: string, status = 200, cacheControl = "no-store"): Response {
-  return new Response(body, { status, headers: { ...HEADERS, "cache-control": cacheControl } });
-}
-
-// Back from the confirmation must return to the same form, with the same idempotency key, so
-// that a resubmit returns the first order (spec 4.2). The browser's back/forward cache does
-// that, but it skips pages sent with no-store, so the price list is sent with max-age=0 instead:
-// still fetched again on every ordinary visit, and private to the phone.
-const PRICE_LIST_CACHE = "private, max-age=0";
-
-function redirect(location: string): Response {
-  // 303 so that the browser follows with a GET and a reload does not post again.
-  return new Response(null, { status: 303, headers: { ...HEADERS, location } });
-}
-
-const inactive = () => htmlResponse(inactivePage(), 404);
-
-/** Order ids in the URL are positive integers; anything else is not an order. */
-function orderId(raw: string): number | null {
-  return /^[1-9]\d{0,17}$/.test(raw) ? Number(raw) : null;
-}
-
-const base = (token: string) => `/order/${encodeURIComponent(token)}`;
 
 export async function showPriceList(token: string, fetchImpl?: Fetch, state?: FormState): Promise<Response> {
   const api = resellerApi(fetchImpl);
@@ -116,9 +85,14 @@ export async function placeOrder(token: string, form: FormData, fetchImpl?: Fetc
 export async function showOrder(token: string, rawId: string, fetchImpl?: Fetch): Promise<Response> {
   const id = orderId(rawId);
   if (id === null) return inactive();
-  const order = await resellerApi(fetchImpl).order(token, id);
+  const api = resellerApi(fetchImpl);
+  const order = await api.order(token, id);
   if (!order.ok) return order.status === 404 ? inactive() : htmlResponse(unavailablePage(token), 503);
-  return htmlResponse(confirmationPage(token, order.body));
+  if (order.body.status !== "delivered") return htmlResponse(confirmationPage(token, order.body));
+  const report = await api.report(token, id);
+  // No report is a 404; any other failure leaves the report out rather than the order.
+  const known = report.ok ? report.body : report.status === 404 ? null : undefined;
+  return htmlResponse(confirmationPage(token, order.body, undefined, known));
 }
 
 export async function cancelOrder(token: string, rawId: string, form: FormData, fetchImpl?: Fetch): Promise<Response> {
